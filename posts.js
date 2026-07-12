@@ -493,6 +493,40 @@ window.BLOG_DATA = {
       "pros": [],
       "cons": [],
       "content": "<p><a href=\"https://sites.google.com/view/local-template-store-fortune-/local-template-store-fortune\" target=\"_blank\" rel=\"noopener sponsored nofollow\">Local Template Store Fortune</a></p>"
+    },
+    {
+      "id": 1783898315983,
+      "slug": "local-toolkit-fortune",
+      "title": "Local Toolkit Fortune",
+      "excerpt": "A done-for-you business tools website with 20 built-in tools, zero API keys needed, and a smart free-to-premium monetization model. I spent a full weekend putting it through its paces.",
+      "date": "2026-07-12",
+      "updated": "2026-07-12",
+      "updatedAt": "2026-07-12T23:20:09.590Z",
+      "publishedAt": "2026-07-12T23:18:35.983Z",
+      "featuredAt": "2026-07-12T23:20:09.590Z",
+      "author": "Editorial Team",
+      "categories": [
+        "Tools & Software",
+        "WordPress"
+      ],
+      "tags": [],
+      "image": "https://dfyfortune.com/wp-content/uploads/2026/01/ltf-cover.webp",
+      "externalUrl": "https://sites.google.com/view/local-toolkit-fortune-/local-toolkit-fortune",
+      "externalTarget": "top",
+      "featured": true,
+      "rating": 0,
+      "review": {
+        "vendor": "",
+        "price": "",
+        "type": "Google Sites page",
+        "bestFor": ""
+      },
+      "affiliateUrl": "",
+      "affiliateLabel": "Visit Page",
+      "disclosure": "Some links may be affiliate links.",
+      "pros": [],
+      "cons": [],
+      "content": "<p><a href=\"https://sites.google.com/view/local-toolkit-fortune-/local-toolkit-fortune\" target=\"_blank\" rel=\"noopener sponsored nofollow\">Local Toolkit Fortune</a></p>"
     }
   ]
 };
