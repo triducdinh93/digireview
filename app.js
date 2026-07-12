@@ -50,22 +50,22 @@
   const sortedPosts = () => posts.slice().sort((a, b) => postTimestamp(b) - postTimestamp(a) || Number(b.id || 0) - Number(a.id || 0));
   const getPost = (slug) => posts.find(post => post.slug === slug);
 
-  // A post can either be rendered inside this blog or point to an existing
-  // published Google Sites page.
-  const postHref = (post) => post.externalUrl
-    ? escapeHtml(post.externalUrl)
-    : `#post=${encodeURIComponent(post.slug)}`;
+  // Imported Google Sites articles contain HTML in post.content and therefore
+  // open inside DigiReview like every other article. The original Google Sites
+  // URL is retained only as a source link.
+  const hasInternalArticle = (post) => Boolean(String(post.content || "").trim());
 
-  // "_top" is recommended when this blog is embedded as a full page in
-  // Google Sites because it replaces the parent Google Sites page instead of
-  // opening a nested iframe.
-  const postTargetAttrs = (post) => post.externalUrl
+  const postHref = (post) => hasInternalArticle(post)
+    ? `#post=${encodeURIComponent(post.slug)}`
+    : (post.externalUrl ? escapeHtml(post.externalUrl) : `#post=${encodeURIComponent(post.slug)}`);
+
+  const postTargetAttrs = (post) => post.externalUrl && !hasInternalArticle(post)
     ? ` target="${post.externalTarget === "blank" ? "_blank" : "_top"}" rel="noopener"`
     : "";
 
-  const postReadLabel = (post) => post.externalUrl
-    ? "Google Sites page"
-    : `${readTime(post)} min read`;
+  const postReadLabel = (post) => hasInternalArticle(post)
+    ? `${readTime(post)} min read`
+    : (post.externalUrl ? "Google Sites page" : `${readTime(post)} min read`);
 
   const noticeStripMarkup = () => {
     const items = sortedPosts().slice(0, 8);
@@ -300,6 +300,9 @@
 
   const renderReviewBox = (post) => {
     const review = post.review || {};
+    const hasDetails = Number(post.rating || 0) > 0 ||
+      [review.vendor, review.price, review.type, review.bestFor].some(value => String(value || "").trim());
+    if (!hasDetails) return "";
     return `<section class="review-box" aria-label="Review summary">
       <div class="review-box-head"><h2>Review Snapshot</h2><div class="score">${Number(post.rating || 0).toFixed(1)}/10</div></div>
       <div class="review-facts">
@@ -310,6 +313,12 @@
       </div>
     </section>`;
   };
+
+  const renderOriginalSource = (post) => post.externalUrl && hasInternalArticle(post) ? `
+    <div class="original-source">
+      <span>This article was imported from a published Google Sites page.</span>
+      <a href="${escapeHtml(post.externalUrl)}" target="_blank" rel="noopener">View original page ↗</a>
+    </div>` : "";
 
   const renderCta = (post) => post.affiliateUrl ? `<section class="cta-box">
     <h2>Check the current product offer</h2>
@@ -374,6 +383,7 @@
               </header>
               <img class="article-hero" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'">
               <div class="disclosure"><strong>Disclosure:</strong> ${escapeHtml(post.disclosure || "This article may contain affiliate links.")}</div>
+              ${renderOriginalSource(post)}
               <div id="toc-container"></div>
               ${renderReviewBox(post)}
               ${renderCta(post)}
@@ -652,6 +662,17 @@
       backToTop.classList.toggle("show", window.scrollY > 700);
       const docHeight = document.documentElement.scrollHeight - window.innerHeight;
       document.getElementById("reading-progress").style.width = `${docHeight > 0 ? (window.scrollY / docHeight) * 100 : 0}%`;
+
+      // On mobile, scrolling always collapses the menu and any open category.
+      if (window.innerWidth <= 760) {
+        const nav = document.getElementById("primary-nav");
+        const menuToggle = document.getElementById("menu-toggle");
+        if (nav.classList.contains("open") || document.querySelector(".nav-dropdown.open")) {
+          nav.classList.remove("open");
+          menuToggle.setAttribute("aria-expanded", "false");
+          closeDropdowns();
+        }
+      }
     }, { passive: true });
 
   };
