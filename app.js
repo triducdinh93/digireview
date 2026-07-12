@@ -50,22 +50,37 @@
   const sortedPosts = () => posts.slice().sort((a, b) => postTimestamp(b) - postTimestamp(a) || Number(b.id || 0) - Number(a.id || 0));
   const getPost = (slug) => posts.find(post => post.slug === slug);
 
-  // Imported Google Sites articles contain HTML in post.content and therefore
-  // open inside DigiReview like every other article. The original Google Sites
-  // URL is retained only as a source link.
+  // Every article opens inside DigiReview. A Google Sites URL is retained as
+  // the original content source and as analytics metadata.
   const hasInternalArticle = (post) => Boolean(String(post.content || "").trim());
 
-  const postHref = (post) => hasInternalArticle(post)
-    ? `#post=${encodeURIComponent(post.slug)}`
-    : (post.externalUrl ? escapeHtml(post.externalUrl) : `#post=${encodeURIComponent(post.slug)}`);
+  const postHref = (post) => `#post=${encodeURIComponent(post.slug)}`;
 
-  const postTargetAttrs = (post) => post.externalUrl && !hasInternalArticle(post)
-    ? ` target="${post.externalTarget === "blank" ? "_blank" : "_top"}" rel="noopener"`
+  const postTargetAttrs = (post) => post.externalUrl
+    ? ` data-google-site-article="true" data-source-url="${escapeHtml(post.externalUrl)}" data-post-slug="${escapeHtml(post.slug)}" data-article-title="${escapeHtml(post.title)}"`
     : "";
 
   const postReadLabel = (post) => hasInternalArticle(post)
     ? `${readTime(post)} min read`
-    : (post.externalUrl ? "Google Sites page" : `${readTime(post)} min read`);
+    : (post.externalUrl ? "Google Sites article" : `${readTime(post)} min read`);
+
+  const trackEvent = (eventName, parameters = {}) => {
+    if (typeof window.gtag !== "function") return;
+    window.gtag("event", eventName, parameters);
+  };
+
+  let firstRouteCompleted = false;
+  const trackVirtualPageView = () => {
+    if (!firstRouteCompleted) {
+      firstRouteCompleted = true;
+      return;
+    }
+    trackEvent("page_view", {
+      page_title: document.title,
+      page_location: location.href,
+      page_path: `${location.pathname}${location.hash}`
+    });
+  };
 
   const noticeStripMarkup = () => {
     const items = sortedPosts().slice(0, 8);
@@ -317,7 +332,7 @@
   const renderOriginalSource = (post) => post.externalUrl && hasInternalArticle(post) ? `
     <div class="original-source">
       <span>This article was imported from a published Google Sites page.</span>
-      <a href="${escapeHtml(post.externalUrl)}" target="_blank" rel="noopener">View original page ↗</a>
+      <a href="${escapeHtml(post.externalUrl)}" target="_blank" rel="noopener" data-google-site-source="true" data-post-slug="${escapeHtml(post.slug)}" data-article-title="${escapeHtml(post.title)}">View original page ↗</a>
     </div>` : "";
 
   const renderCta = (post) => post.affiliateUrl ? `<section class="cta-box">
@@ -363,8 +378,203 @@
     return `<div id="giscus-container" data-post-slug="${escapeHtml(post.slug)}"></div>`;
   };
 
-  const renderPost = (post) => {
+  const inlineImportedMarkdown = (value) => {
+    let text = escapeHtml(String(value || ""));
+    text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g,
+      '<a href="$2" target="_blank" rel="noopener sponsored nofollow">$1</a>');
+    text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    text = text.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+    text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
+    text = text.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    return text;
+  };
+
+  const normalizeImportedImage = (value) => String(value || "")
+    .replace(/\\u003d/gi, "=")
+    .replace(/\\u0026/gi, "&")
+    .replace(/&amp;/gi, "&")
+    .replace(/\\\//g, "/")
+    .replace(/%3D/gi, "=")
+    .replace(/%26/gi, "&")
+    .replace(/[),.;]+$/, "")
+    .trim();
+
+  const importedMarkdownToHtml = (markdown, articleTitle, heroImage) => {
+    let source = String(markdown || "");
+    source = source.replace(/^[\s\S]*?Markdown Content:\s*/i, "");
+    source = source.split(/\n(?:#{1,3}\s*)?(?:Images|Buttons\s*&\s*Links|Links Summary):?\s*\n/i)[0];
+
+    const noise = /^(search this site|embedded files|skip to main content|skip to navigation|google sites|report abuse|page details|page updated)$/i;
+    const lines = source.split(/\r?\n/);
+    const html = [];
+    let paragraph = [];
+    let listType = "";
+    let listItems = [];
+    let skippedHero = false;
+
+    const flushParagraph = () => {
+      const value = paragraph.join(" ").trim();
+      if (value) html.push(`<p>${inlineImportedMarkdown(value)}</p>`);
+      paragraph = [];
+    };
+
+    const flushList = () => {
+      if (!listType || !listItems.length) return;
+      html.push(`<${listType}>${listItems.map(item => `<li>${inlineImportedMarkdown(item)}</li>`).join("")}</${listType}>`);
+      listType = "";
+      listItems = [];
+    };
+
+    const flushAll = () => {
+      flushParagraph();
+      flushList();
+    };
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+
+      if (!line) {
+        flushAll();
+        continue;
+      }
+
+      const plain = String(line)
+        .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/[`*_>#|~-]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!plain || noise.test(plain)) continue;
+
+      const imageMatch = line.match(/^!\[([^\]]*)\]\((https?:\/\/[^\s)]+)(?:\s+"[^"]*")?\)$/i);
+      if (imageMatch) {
+        flushAll();
+        const imageUrl = normalizeImportedImage(imageMatch[2]);
+        if (!skippedHero && heroImage && normalizeImportedImage(heroImage) === imageUrl) {
+          skippedHero = true;
+          continue;
+        }
+        html.push(`<figure><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(imageMatch[1] || articleTitle || "")}" loading="lazy" onerror="this.closest('figure')?.remove()"></figure>`);
+        continue;
+      }
+
+      const heading = line.match(/^(#{1,6})\s+(.+)$/);
+      if (heading) {
+        flushAll();
+        const level = Math.min(3, Math.max(2, heading[1].length));
+        const headingText = heading[2].replace(/[`*_>#|~-]/g, " ").replace(/\s+/g, " ").trim();
+        if (heading[1].length === 1 &&
+            headingText.toLowerCase() === String(articleTitle || "").trim().toLowerCase()) {
+          continue;
+        }
+        html.push(`<h${level}>${inlineImportedMarkdown(heading[2])}</h${level}>`);
+        continue;
+      }
+
+      const bullet = line.match(/^[-*+]\s+(.+)$/);
+      if (bullet) {
+        flushParagraph();
+        if (listType && listType !== "ul") flushList();
+        listType = "ul";
+        listItems.push(bullet[1]);
+        continue;
+      }
+
+      const numbered = line.match(/^\d+[.)]\s+(.+)$/);
+      if (numbered) {
+        flushParagraph();
+        if (listType && listType !== "ol") flushList();
+        listType = "ol";
+        listItems.push(numbered[1]);
+        continue;
+      }
+
+      const quote = line.match(/^>\s*(.+)$/);
+      if (quote) {
+        flushAll();
+        html.push(`<blockquote>${inlineImportedMarkdown(quote[1])}</blockquote>`);
+        continue;
+      }
+
+      if (/^[-*_]{3,}$/.test(line)) {
+        flushAll();
+        html.push("<hr>");
+        continue;
+      }
+
+      if (listType) flushList();
+      paragraph.push(line);
+    }
+
+    flushAll();
+    return html.join("\n");
+  };
+
+  const loadGoogleSitesArticle = async (post) => {
+    if (!post.externalUrl || hasInternalArticle(post)) return post.content || "";
+
+    const cacheKey = `digireview-live-google-site-${post.slug}-${post.externalUrl}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      post.content = cached;
+      return cached;
+    }
+
+    const response = await fetch(`https://r.jina.ai/${post.externalUrl}`, {
+      cache: "no-store",
+      headers: {
+        "Accept": "text/plain",
+        "X-No-Cache": "true",
+        "X-Cache-Tolerance": "0",
+        "X-With-Images-Summary": "true"
+      }
+    });
+
+    if (!response.ok) throw new Error(`Google Sites reader returned HTTP ${response.status}`);
+    const markdown = await response.text();
+    const html = importedMarkdownToHtml(markdown, post.title, post.image);
+    if (!html.trim()) throw new Error("No readable article content was returned.");
+
+    post.content = html;
+    sessionStorage.setItem(cacheKey, html);
+    return html;
+  };
+
+  const renderArticleLoading = (post) => {
+    setPageTitle(post.title, post.excerpt);
+    app.innerHTML = `
+      <section class="article-loading">
+        <div class="container">
+          <div class="loading-card">
+            <span class="category-pill">${escapeHtml(post.categories?.[0] || "Article")}</span>
+            <h1>${escapeHtml(post.title)}</h1>
+            <p>Loading the published Google Sites article inside DigiReview…</p>
+            <div class="loading-bar"><span></span></div>
+          </div>
+        </div>
+      </section>`;
+    scrollTop();
+  };
+
+  const renderPost = async (post) => {
     if (!post) return renderNotFound();
+
+    if (post.externalUrl && !hasInternalArticle(post)) {
+      renderArticleLoading(post);
+      try {
+        await loadGoogleSitesArticle(post);
+      } catch (error) {
+        post.content = `
+          <div class="import-error">
+            <h2>The article could not be loaded automatically</h2>
+            <p>${escapeHtml(error.message)}</p>
+            <p><a href="${escapeHtml(post.externalUrl)}" target="_blank" rel="noopener" data-google-site-source="true" data-post-slug="${escapeHtml(post.slug)}" data-article-title="${escapeHtml(post.title)}">Open the original Google Sites page ↗</a></p>
+          </div>`;
+      }
+    }
+
     setPageTitle(post.title, post.excerpt);
     updateJsonLd(post);
     const views = incrementView(post.slug);
@@ -409,6 +619,15 @@
     bindRating(post.slug);
     loadGiscus();
     scrollTop();
+
+    if (post.externalUrl) {
+      trackEvent("google_site_article_view", {
+        article_slug: post.slug,
+        article_title: post.title,
+        source_url: post.externalUrl,
+        display_mode: "internal_article"
+      });
+    }
   };
 
   const buildToc = () => {
@@ -551,18 +770,36 @@
     } catch (_) { showToast("Could not send. Check the configured endpoint."); }
   };
 
-  const route = () => {
+  const route = async () => {
     const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
-    if (!hash || hash === "home") return renderHome();
-    if (hash === "archive") { currentPage = 1; return renderArchive(); }
-    const [key, ...rest] = hash.split("=");
-    const value = rest.join("=");
-    if (key === "post") return renderPost(getPost(value));
-    if (key === "category") return renderCategory(value);
-    if (key === "search") return renderSearch(value);
-    if (key === "page") return renderPage(value);
-    if (document.getElementById(hash)) return document.getElementById(hash).scrollIntoView({ behavior: "smooth" });
-    return renderNotFound();
+    let result;
+
+    if (!hash || hash === "home") {
+      result = renderHome();
+    } else if (hash === "archive") {
+      currentPage = 1;
+      result = renderArchive();
+    } else {
+      const [key, ...rest] = hash.split("=");
+      const value = rest.join("=");
+
+      if (key === "post") {
+        result = await renderPost(getPost(value));
+      } else if (key === "category") {
+        result = renderCategory(value);
+      } else if (key === "search") {
+        result = renderSearch(value);
+      } else if (key === "page") {
+        result = renderPage(value);
+      } else if (document.getElementById(hash)) {
+        result = document.getElementById(hash).scrollIntoView({ behavior: "smooth" });
+      } else {
+        result = renderNotFound();
+      }
+    }
+
+    trackVirtualPageView();
+    return result;
   };
 
   const liveSearch = (query) => {
@@ -618,6 +855,25 @@
     }));
 
     document.addEventListener("click", event => {
+      const googleArticleLink = event.target.closest("a[data-google-site-article]");
+      if (googleArticleLink) {
+        trackEvent("google_site_article_click", {
+          article_slug: googleArticleLink.dataset.postSlug || "",
+          article_title: googleArticleLink.dataset.articleTitle || "",
+          source_url: googleArticleLink.dataset.sourceUrl || "",
+          destination: googleArticleLink.getAttribute("href") || ""
+        });
+      }
+
+      const googleSourceLink = event.target.closest("a[data-google-site-source]");
+      if (googleSourceLink) {
+        trackEvent("google_site_source_click", {
+          article_slug: googleSourceLink.dataset.postSlug || "",
+          article_title: googleSourceLink.dataset.articleTitle || "",
+          source_url: googleSourceLink.getAttribute("href") || ""
+        });
+      }
+
       const nav = document.getElementById("primary-nav");
       const menuToggle = document.getElementById("menu-toggle");
       const clickedInsideDropdown = event.target.closest(".nav-dropdown");
@@ -708,7 +964,7 @@
 
   const startApp = () => {
     initChrome();
-    route();
+    route().catch(error => console.error("Initial route failed", error));
     window.setInterval(checkForPostUpdates, 45000);
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") checkForPostUpdates();
@@ -716,7 +972,7 @@
     window.addEventListener("focus", checkForPostUpdates);
   };
 
-  window.addEventListener("hashchange", route);
+  window.addEventListener("hashchange", () => route().catch(error => console.error("Route failed", error)));
   if (document.readyState === "loading") {
     window.addEventListener("DOMContentLoaded", startApp, { once: true });
   } else {
