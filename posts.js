@@ -6,8 +6,8 @@ window.BLOG_DATA = {
   site: {
     name: "DigiReview",
     tagline: "Reviews & Buying Guides",
-    topbarText: "Independent reviews. Clear buying decisions.",
     description: "Practical reviews and buying guides for digital products, software and online marketing tools.",
+    categoryOptions: ["AI Tools", "Tools & Software", "Product Reviews", "How To", "Affiliate Marketing", "Digital Marketing", "SEO", "SEO & Traffic", "PLR", "WordPress", "Video Marketing", "Bonuses"],
     language: "en",
     postsPerPage: 6,
     newsletterEndpoint: "",

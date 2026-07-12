@@ -19,18 +19,6 @@
   <div id="reading-progress" aria-hidden="true"></div>
 
   <header class="site-header" id="site-header">
-    <div class="topbar">
-      <div class="container topbar-inner">
-        <span id="topbar-text">Independent reviews. Clear buying decisions.</span>
-        <div class="topbar-actions">
-          <button class="icon-btn" id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
-            <span class="theme-icon">◐</span>
-          </button>
-          <button class="text-btn" id="open-search" type="button">Search</button>
-        </div>
-      </div>
-    </div>
-
     <div class="container brand-row">
       <a class="brand" href="#home" aria-label="DigiReview Journal home">
         <span class="brand-mark">DR</span>
@@ -39,8 +27,14 @@
           <small id="brand-tagline">Reviews & Buying Guides</small>
         </span>
       </a>
-      <a class="header-cta" id="header-cta" href="#category=AI%20Tools">Top Recommendations</a>
-      <button class="menu-toggle" id="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+      <div class="brand-actions">
+        <button class="icon-btn" id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+          <span class="theme-icon">◐</span>
+        </button>
+        <button class="text-btn" id="open-search" type="button">Search</button>
+        <a class="header-cta" id="header-cta" href="#category=AI%20Tools">Top Recommendations</a>
+        <button class="menu-toggle" id="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+      </div>
     </div>
 
     <nav class="primary-nav" id="primary-nav" aria-label="Primary navigation">
@@ -135,9 +129,5 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <button class="back-to-top" id="back-to-top" type="button" aria-label="Back to top">↑</button>
 
-  <div class="cookie-banner" id="cookie-banner" hidden>
-    <p>This demo uses local storage for theme, rating and view preferences. Add your own consent manager before production use.</p>
-    <button type="button" id="accept-cookies">Got it</button>
-  </div>
 </body>
 </html>

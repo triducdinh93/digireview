@@ -55,6 +55,21 @@
     ? "Google Sites page"
     : `${readTime(post)} min read`;
 
+  const noticeStripMarkup = () => {
+    const items = sortedPosts().slice(0, 8);
+    if (!items.length) return "";
+    const links = items.map(post => `<a href="${postHref(post)}"${postTargetAttrs(post)}>${escapeHtml(post.title)}</a>`).join('<span class="notice-sep">•</span>');
+    return `
+      <section class="notice-strip" aria-label="Latest updates">
+        <div class="container notice-strip-inner">
+          <strong>Latest updates</strong>
+          <div class="notice-marquee">
+            <div class="notice-track">${links}<span class="notice-sep">•</span>${links}</div>
+          </div>
+        </div>
+      </section>`;
+  };
+
   const showToast = (message) => {
     toast.textContent = message;
     toast.classList.add("show");
@@ -202,14 +217,8 @@
     const latest = sortedPosts();
     const categories = categoryCounts().slice(0, 7).map(([name]) => name);
     app.innerHTML = `
-      <section class="hero">
-        <div class="container hero-copy">
-          <span class="eyebrow">Independent digital product reviews</span>
-          <h1>Understand the product before you click buy.</h1>
-          <p>${escapeHtml(site.description || "Practical product reviews and buying guides.")}</p>
-        </div>
-      </section>
-      <section class="section">
+      ${noticeStripMarkup()}
+      <section class="section section-first">
         <div class="container">
           <div class="section-heading"><div><h2>Featured reviews</h2><p>Recent products, guides and buyer checks.</p></div><a class="section-link" href="#archive">View all posts →</a></div>
           ${featuredMarkup()}
@@ -544,7 +553,6 @@
   const initChrome = () => {
     document.getElementById("brand-name").textContent = site.name || "DigiReview";
     document.getElementById("brand-tagline").textContent = site.tagline || "Reviews & Buying Guides";
-    document.getElementById("topbar-text").textContent = site.topbarText || "Independent reviews. Clear buying decisions.";
     document.getElementById("footer-about").textContent = site.description || "Practical reviews and buying guides.";
     document.getElementById("current-year").textContent = new Date().getFullYear();
 
@@ -601,12 +609,6 @@
       document.getElementById("reading-progress").style.width = `${docHeight > 0 ? (window.scrollY / docHeight) * 100 : 0}%`;
     }, { passive: true });
 
-    const cookie = document.getElementById("cookie-banner");
-    if (!localStorage.getItem("digireview-cookie-notice")) cookie.hidden = false;
-    document.getElementById("accept-cookies").addEventListener("click", () => {
-      localStorage.setItem("digireview-cookie-notice", "accepted");
-      cookie.hidden = true;
-    });
   };
 
   window.addEventListener("hashchange", route);
