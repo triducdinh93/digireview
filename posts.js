@@ -461,7 +461,7 @@ window.BLOG_DATA = {
       "content": "<p>A useful bonus page explains exactly what the buyer receives, how to request access and where to get support. It should not inflate the value of generic files or include materials you do not have permission to distribute.</p><h2>Page structure</h2><ul><li>Purchase verification instructions</li><li>Bonus list with clear descriptions</li><li>Access buttons and file requirements</li><li>Support contact and response expectations</li><li>License and usage notes</li></ul><h2>Maintain delivery links</h2><p>Check shared-drive permissions, expired URLs and file names regularly. Keep a backup of every promised item.</p><h2>Set realistic expectations</h2><p>Bonuses can add practical value, but they do not guarantee results from the main product.</p>"
     },
     {
-      "id": 1783892614318,
+      "id": 1783893095560,
       "slug": "local-template-store-fortune-review",
       "title": "Local Template Store Fortune Review",
       "excerpt": "I spent time digging into this done-for-you WordPress store with 2,500+ Canva templates across 30 local niches. Here is everything I found.",
@@ -478,7 +478,7 @@ window.BLOG_DATA = {
       "image": "",
       "externalUrl": "https://sites.google.com/view/local-template-store-fortune-/local-template-store-fortune",
       "externalTarget": "top",
-      "featured": false,
+      "featured": true,
       "rating": 0,
       "review": {
         "vendor": "",
