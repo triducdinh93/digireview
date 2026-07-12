@@ -467,12 +467,13 @@ window.BLOG_DATA = {
       "excerpt": "I spent time digging into this done-for-you WordPress store with 2,500+ Canva templates across 30 local niches. Here is everything I found.",
       "date": "2026-07-12",
       "updated": "2026-07-12",
-      "updatedAt": "2026-07-12T23:12:15.996Z",
+      "updatedAt": "2026-07-12T23:12:34.906Z",
       "publishedAt": "2026-07-12T22:45:17.760Z",
-      "featuredAt": "2026-07-12T23:12:15.996Z",
+      "featuredAt": "2026-07-12T23:12:34.906Z",
       "author": "Editorial Team",
       "categories": [
-        "Product Reviews"
+        "Product Reviews",
+        "WordPress"
       ],
       "tags": [],
       "image": "https://dfyfortune.com/wp-content/uploads/2026/05/ltsf-productcover.webp",
