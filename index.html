@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <meta name="description" content="Independent digital product reviews, comparisons and practical buying guides." />
   <meta name="theme-color" content="#ffffff" />
   <meta property="og:type" content="website" />
@@ -10,9 +13,52 @@
   <meta property="og:description" content="Independent digital product reviews, comparisons and practical buying guides." />
   <title>DigiReview Journal</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="style.css" />
-  <script defer src="posts.js"></script>
-  <script defer src="app.js"></script>
+  <link rel="stylesheet" href="style.css?v=3.0.0" />
+  <script>
+    window.BLOG_REPOSITORY = {
+      owner: "triducdinh93",
+      repo: "digireview",
+      branch: "main"
+    };
+
+    (async () => {
+      const stamp = Date.now();
+      const repo = window.BLOG_REPOSITORY;
+      const candidates = [
+        `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${repo.branch}/posts.js?v=${stamp}`,
+        `posts.js?v=${stamp}`
+      ];
+
+      let loaded = false;
+      for (const url of candidates) {
+        try {
+          const response = await fetch(url, { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const source = await response.text();
+          Function(source)();
+          if (!window.BLOG_DATA) throw new Error("BLOG_DATA was not created");
+          window.BLOG_DATA_SOURCE = url;
+          loaded = true;
+          break;
+        } catch (error) {
+          console.warn("Unable to load blog data from", url, error);
+        }
+      }
+
+      if (!loaded) {
+        document.addEventListener("DOMContentLoaded", () => {
+          const app = document.getElementById("app");
+          if (app) app.innerHTML = "<div class='container' style='padding:60px 0'><h1>Unable to load posts</h1><p>Please reload the page.</p></div>";
+        });
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = `app.js?v=3.0.0-${stamp}`;
+      script.defer = true;
+      document.head.appendChild(script);
+    })();
+  </script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>

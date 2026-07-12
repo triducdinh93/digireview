@@ -3,456 +3,682 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <title>DigiReview Quick Publisher</title>
-  <script src="posts.js"></script>
   <style>
-    :root{
-      --bg:#f8fcfa;--surface:#ffffff;--soft:#eef7f2;--line:#d7e8de;--text:#13221a;--muted:#63796d;
-      --primary:#1f9d68;--primary-dark:#167650;--danger:#c84c63;--shadow:0 18px 40px rgba(19,34,26,.08)
-    }
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
-    button,input,textarea,select{font:inherit}
-    .wrap{width:min(1320px,calc(100% - 28px));margin:22px auto}
-    .top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:18px}
-    .title h1{margin:0;font-size:30px}.title p{margin:8px 0 0;color:var(--muted)}
-    .actions{display:flex;gap:8px;flex-wrap:wrap}
-    button,.button{border:0;border-radius:12px;padding:11px 15px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;font-weight:800;cursor:pointer;box-shadow:0 10px 24px rgba(31,157,104,.18)}
-    button.secondary,.button.secondary{background:#fff;color:var(--text);border:1px solid var(--line);box-shadow:none}
-    button.danger{background:var(--danger)}
-    .layout{display:grid;grid-template-columns:340px minmax(0,1fr);gap:18px}
-    .panel{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
-    .panel h2{margin:0 0 14px;font-size:18px}
-    .status{padding:12px 14px;background:var(--soft);border:1px solid var(--line);border-radius:12px;color:#19583c;margin-bottom:14px}
-    .group{display:grid;gap:10px;margin-bottom:18px}
-    label{display:grid;gap:6px;font-size:13px;font-weight:800}
-    input,textarea,select{width:100%;border:1px solid #cfe0d6;border-radius:12px;padding:11px 12px;background:#fff;color:var(--text)}
-    textarea{resize:vertical}
-    .hint{font-size:12px;color:var(--muted)}
-    .posts{display:grid;gap:9px;max-height:430px;overflow:auto}
-    .post-item{border:1px solid var(--line);border-radius:12px;padding:11px 12px;cursor:pointer;background:#fff}
-    .post-item.active,.post-item:hover{border-color:var(--primary);background:#f3fbf7}
-    .post-item strong{display:block;line-height:1.35}
-    .post-item span{display:block;margin-top:4px;font-size:12px;color:var(--muted)}
-    .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-    .full{grid-column:1/-1}
-    .category-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-    .check{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;font-weight:650}
-    .check input{width:auto;margin:0}
-    .preview{border:1px solid var(--line);border-radius:18px;background:#fff;overflow:hidden}
-    .preview-top{padding:18px 18px 0}
-    .badge{display:inline-flex;padding:6px 10px;border-radius:999px;background:#e5f7ed;color:var(--primary);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.4px}
-    .preview h3{font-size:28px;line-height:1.15;margin:12px 0}
-    .preview p{color:var(--muted)}
-    .preview-img{width:100%;aspect-ratio:16/8;object-fit:cover;background:#edf5f0;margin-top:16px}
-    .preview-footer{padding:18px;display:flex;justify-content:space-between;gap:12px;align-items:center}
-    .preview-link{display:inline-flex;align-items:center;justify-content:center;padding:11px 14px;border-radius:12px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;font-weight:800;text-decoration:none}
-    .muted{color:var(--muted)}
-    .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-    .divider{height:1px;background:var(--line);margin:16px 0}
-    @media(max-width:980px){.layout{grid-template-columns:1fr}.category-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-    @media(max-width:720px){.top{flex-direction:column}.form-grid,.two,.category-grid{grid-template-columns:1fr}}
+    :root{--bg:#f8fcfa;--surface:#fff;--soft:#eef8f2;--line:#d5e8dc;--text:#13251b;--muted:#63796d;--primary:#1f9d68;--primary-dark:#146e4a;--danger:#c84c63;--shadow:0 18px 40px rgba(19,37,27,.08)}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}button,input,textarea,select{font:inherit}.wrap{width:min(1320px,calc(100% - 28px));margin:22px auto}
+    .top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:18px}.title h1{margin:0;font-size:30px}.title p{margin:8px 0 0;color:var(--muted)}.actions{display:flex;gap:8px;flex-wrap:wrap}
+    button{border:0;border-radius:12px;padding:11px 15px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;font-weight:800;cursor:pointer;box-shadow:0 10px 24px rgba(31,157,104,.18)}button.secondary{background:#fff;color:var(--text);border:1px solid var(--line);box-shadow:none}button.danger{background:var(--danger)}button:disabled{opacity:.55;cursor:wait}
+    .layout{display:grid;grid-template-columns:340px minmax(0,1fr);gap:18px}.panel{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:var(--shadow)}.panel h2{margin:0 0 14px;font-size:18px}
+    .status{padding:12px 14px;background:var(--soft);border:1px solid var(--line);border-radius:12px;color:#19583c;margin-bottom:14px;white-space:pre-wrap}.group{display:grid;gap:10px;margin-bottom:18px}label{display:grid;gap:6px;font-size:13px;font-weight:800}
+    input,textarea,select{width:100%;border:1px solid #cfe0d6;border-radius:12px;padding:11px 12px;background:#fff;color:var(--text)}textarea{resize:vertical}.hint{font-size:12px;color:var(--muted)}
+    .posts{display:grid;gap:9px;max-height:430px;overflow:auto}.post-item{border:1px solid var(--line);border-radius:12px;padding:11px 12px;cursor:pointer;background:#fff}.post-item.active,.post-item:hover{border-color:var(--primary);background:#f3fbf7}.post-item strong{display:block;line-height:1.35}.post-item span{display:block;margin-top:4px;font-size:12px;color:var(--muted)}
+    .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.full{grid-column:1/-1}.url-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.url-row button{white-space:nowrap}
+    .category-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.check{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#fff;font-weight:650}.check input{width:auto;margin:0}
+    .preview{border:1px solid var(--line);border-radius:18px;background:#fff;overflow:hidden}.preview-top{padding:18px 18px 0}.badge{display:inline-flex;padding:6px 10px;border-radius:999px;background:#e5f7ed;color:var(--primary);font-size:11px;font-weight:900;text-transform:uppercase}.preview h3{font-size:28px;line-height:1.15;margin:12px 0}.preview p{color:var(--muted)}
+    .preview-img{width:100%;aspect-ratio:16/8;object-fit:cover;background:#edf5f0;margin-top:16px}.preview-footer{padding:18px;display:flex;justify-content:space-between;gap:12px;align-items:center}.preview-link{display:inline-flex;padding:11px 14px;border-radius:12px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;font-weight:800;text-decoration:none}
+    .muted{color:var(--muted)}.divider{height:1px;background:var(--line);margin:16px 0}.import-note{padding:10px 12px;border-radius:12px;background:#f6fbf8;border:1px dashed var(--line);font-size:12px;color:var(--muted)}
+    @media(max-width:980px){.layout{grid-template-columns:1fr}.category-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:720px){.top{flex-direction:column}.form-grid,.category-grid,.url-row{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
-      <div class="title">
-        <h1>DigiReview Quick Publisher</h1>
-        <p>Sau khi cấu hình GitHub một lần, bạn chỉ cần nhập tiêu đề, chọn Categories, dán link Google Sites rồi nhấn <strong>Save post</strong>. Hệ thống sẽ tự publish lại <code>posts.js</code> lên GitHub để trang chủ cập nhật tự động.</p>
-      </div>
-      <div class="actions">
-        <button id="new-post">New post</button>
-        <button class="secondary" id="save-local-only" type="button">Save locally only</button>
-        <button class="secondary" id="import-file" type="button">Import posts.js</button>
-        <button class="secondary" id="export-file" type="button">Export posts.js</button>
-        <input id="file-input" type="file" accept=".js,.json" hidden>
-      </div>
+<div class="wrap">
+  <div class="top">
+    <div class="title">
+      <h1>DigiReview Quick Publisher</h1>
+      <p>Dán URL Google Sites để tự lấy tiêu đề, mô tả, chuyên mục và thumbnail. Bạn vẫn có thể chỉnh lại trước khi nhấn <strong>Save post</strong>.</p>
     </div>
-
-    <div class="layout">
-      <aside class="panel">
-        <div class="status" id="status">Ready. Complete GitHub settings to enable automatic publishing.</div>
-
-        <h2>GitHub publishing settings</h2>
-        <div class="group">
-          <label>GitHub username<input id="gh-owner" placeholder="triducdinh93"></label>
-          <label>Repository name<input id="gh-repo" placeholder="ten-repository"></label>
-          <label>Branch<input id="gh-branch" value="main"></label>
-          <label>Personal access token<input id="gh-token" type="password" placeholder="ghp_..."></label>
-          <div class="hint">Token chỉ được lưu trong trình duyệt của bạn. Hãy cấp quyền truy cập repository để cập nhật file <code>posts.js</code>.</div>
-          <div class="actions">
-            <button class="secondary" type="button" id="save-gh-config">Save GitHub settings</button>
-            <button class="secondary" type="button" id="test-publish">Test publish</button>
-          </div>
-        </div>
-
-        <div class="divider"></div>
-
-        <h2>Posts</h2>
-        <div class="posts" id="post-list"></div>
-      </aside>
-
-      <main class="panel">
-        <form id="editor-form" class="form-grid">
-          <input type="hidden" name="id">
-          <input type="hidden" name="updated">
-          <label class="full">Title<input name="title" required></label>
-          <label>Slug<input name="slug" required></label>
-          <label>Date<input name="date" type="date" required></label>
-
-          <label class="full">Excerpt<textarea name="excerpt" rows="3" required></textarea></label>
-          <label>Featured on homepage
-            <select name="featured">
-              <option value="false">No</option>
-              <option value="true">Yes</option>
-            </select>
-          </label>
-          <label>Featured image URL<input name="image" placeholder="https://..."></label>
-          <label class="full">Google Sites page URL<input name="externalUrl" placeholder="https://sites.google.com/view/.../ten-trang" required></label>
-          <label>Open link
-            <select name="externalTarget">
-              <option value="top">In the current browser page</option>
-              <option value="blank">In a new tab</option>
-            </select>
-          </label>
-
-          <div class="full">
-            <label>Categories</label>
-            <div class="category-grid" id="category-grid"></div>
-            <div class="hint">Chọn một hoặc nhiều chuyên mục. Bạn không cần nhập dạng comma separated nữa.</div>
-          </div>
-
-          <div class="full actions">
-            <button type="submit">Save post</button>
-            <button type="button" class="danger" id="delete-post">Delete post</button>
-          </div>
-        </form>
-
-        <div class="divider"></div>
-
-        <h2>Preview</h2>
-        <div class="preview" id="preview"></div>
-      </main>
+    <div class="actions">
+      <button id="new-post" type="button">New post</button>
+      <button class="secondary" id="save-local-only" type="button">Save locally only</button>
+      <button class="secondary" id="import-file" type="button">Import posts.js</button>
+      <button class="secondary" id="export-file" type="button">Export posts.js</button>
+      <input id="file-input" type="file" accept=".js,.json" hidden>
     </div>
   </div>
 
+  <div class="layout">
+    <aside class="panel">
+      <div class="status" id="status">Loading current posts…</div>
+      <h2>GitHub publishing settings</h2>
+      <div class="group">
+        <label>GitHub username<input id="gh-owner" value="triducdinh93"></label>
+        <label>Repository name<input id="gh-repo" value="digireview"></label>
+        <label>Branch<input id="gh-branch" value="main"></label>
+        <label>Personal access token<input id="gh-token" type="password" placeholder="github_pat_..."></label>
+        <div class="hint">Token được lưu trong trình duyệt của bạn và cần quyền Contents: Read and write.</div>
+        <div class="actions">
+          <button class="secondary" type="button" id="save-gh-config">Save settings</button>
+          <button class="secondary" type="button" id="test-publish">Test connection</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <h2>Posts</h2>
+      <div class="posts" id="post-list"></div>
+    </aside>
+
+    <main class="panel">
+      <form id="editor-form" class="form-grid">
+        <input type="hidden" name="id">
+        <input type="hidden" name="publishedAt">
+        <input type="hidden" name="featuredAt">
+
+        <label class="full">Google Sites page URL
+          <div class="url-row">
+            <input name="externalUrl" placeholder="https://sites.google.com/view/..." required>
+            <button id="auto-import" type="button">Auto-fill</button>
+          </div>
+          <span class="hint">Khi dán URL, hệ thống sẽ tự thử đọc trang. Trang Google Sites phải được Publish công khai.</span>
+        </label>
+
+        <label class="full">Title<input name="title" required></label>
+        <label>Slug<input name="slug" required></label>
+        <label>Date<input name="date" type="date" required></label>
+        <label class="full">Excerpt<textarea name="excerpt" rows="3" required></textarea></label>
+
+        <label>Featured on homepage
+          <select name="featured">
+            <option value="false">No</option>
+            <option value="true">Yes — put this post first</option>
+          </select>
+        </label>
+        <label>Open link
+          <select name="externalTarget">
+            <option value="top">In the current browser page</option>
+            <option value="blank">In a new tab</option>
+          </select>
+        </label>
+        <label class="full">Featured image URL<input name="image" placeholder="Automatically detected or paste an image URL"></label>
+
+        <div class="full">
+          <label>Categories</label>
+          <div class="category-grid" id="category-grid"></div>
+        </div>
+
+        <div class="full import-note">Auto-fill uses Jina Reader to read the public Google Sites page. The result is best-effort, so review the title, excerpt, categories and thumbnail before saving.</div>
+
+        <div class="full actions">
+          <button type="submit">Save post</button>
+          <button type="button" class="danger" id="delete-post">Delete post</button>
+        </div>
+      </form>
+
+      <div class="divider"></div>
+      <h2>Preview</h2>
+      <div class="preview" id="preview"></div>
+    </main>
+  </div>
+</div>
+
 <script>
-(() => {
-  const original = window.BLOG_DATA || {site:{},pages:{},posts:[]};
+(async () => {
+  const repositoryDefaults = { owner: "triducdinh93", repo: "digireview", branch: "main" };
+
+  const esc = (value="") => String(value).replace(/[&<>'"]/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"
+  }[c]));
+
+  const slugify = value => String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  const stripMarkdown = value => String(value || "")
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[`*_>#|~-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const toExcerpt = value => {
+    const clean = stripMarkdown(value);
+    if (clean.length <= 230) return clean;
+    const cut = clean.slice(0, 230);
+    return cut.slice(0, Math.max(cut.lastIndexOf(" "), 170)).trim() + "…";
+  };
+
+  const loadLatestBlogData = async () => {
+    const stamp = Date.now();
+    const urls = [
+      `https://raw.githubusercontent.com/${repositoryDefaults.owner}/${repositoryDefaults.repo}/${repositoryDefaults.branch}/posts.js?v=${stamp}`,
+      `posts.js?v=${stamp}`
+    ];
+    for (const url of urls) {
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const source = await response.text();
+        const sandbox = {};
+        Function("window", source)(sandbox);
+        if (sandbox.BLOG_DATA?.posts) return sandbox.BLOG_DATA;
+      } catch (error) {
+        console.warn("Cannot load", url, error);
+      }
+    }
+    return { site: {}, pages: {}, posts: [] };
+  };
+
+  const original = await loadLatestBlogData();
   const categoryOptions = original.site?.categoryOptions || [
     "AI Tools","Tools & Software","Product Reviews","How To","Affiliate Marketing",
     "Digital Marketing","SEO","SEO & Traffic","PLR","WordPress","Video Marketing","Bonuses"
   ];
-  const saved = localStorage.getItem('digireview-admin-data');
-  let data = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(original));
+
+  const savedLocal = localStorage.getItem("digireview-admin-data");
+  let data = savedLocal ? JSON.parse(savedLocal) : JSON.parse(JSON.stringify(original));
   let selectedId = data.posts[0]?.id || null;
 
-  const list = document.getElementById('post-list');
-  const form = document.getElementById('editor-form');
-  const status = document.getElementById('status');
-  const preview = document.getElementById('preview');
-  const categoryGrid = document.getElementById('category-grid');
-  const fileInput = document.getElementById('file-input');
+  const list = document.getElementById("post-list");
+  const form = document.getElementById("editor-form");
+  const status = document.getElementById("status");
+  const preview = document.getElementById("preview");
+  const categoryGrid = document.getElementById("category-grid");
+  const fileInput = document.getElementById("file-input");
+  const autoImportButton = document.getElementById("auto-import");
 
-  const esc = (value='') => String(value).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-  const slugify = value => String(value||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
-  const persist = msg => { localStorage.setItem('digireview-admin-data', JSON.stringify(data)); status.textContent = msg; renderList(); };
-  const selected = () => data.posts.find(p => p.id === selectedId);
-  const sortedPosts = () => data.posts.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const selected = () => data.posts.find(post => post.id === selectedId);
+  const postTime = post => Date.parse(post.publishedAt || post.updatedAt || post.updated || `${post.date || "1970-01-01"}T00:00:00`) || 0;
+  const sortedPosts = () => data.posts.slice().sort((a,b) => postTime(b) - postTime(a) || Number(b.id||0)-Number(a.id||0));
 
-  function renderCategoryOptions(selectedCategories=[]){
-    categoryGrid.innerHTML = categoryOptions.map(cat => `
+  const persist = message => {
+    localStorage.setItem("digireview-admin-data", JSON.stringify(data));
+    status.textContent = message;
+    renderList();
+  };
+
+  function renderCategoryOptions(selectedCategories = []) {
+    categoryGrid.innerHTML = categoryOptions.map(category => `
       <label class="check">
-        <input type="checkbox" name="categories" value="${esc(cat)}" ${selectedCategories.includes(cat) ? 'checked' : ''}>
-        <span>${esc(cat)}</span>
+        <input type="checkbox" name="categories" value="${esc(category)}" ${selectedCategories.includes(category) ? "checked" : ""}>
+        <span>${esc(category)}</span>
       </label>
-    `).join('');
+    `).join("");
   }
 
-  function renderList(){
+  function getSelectedCategories() {
+    return [...form.querySelectorAll('input[name="categories"]:checked')].map(input => input.value);
+  }
+
+  function setSelectedCategories(categories) {
+    renderCategoryOptions(categories);
+  }
+
+  function renderList() {
     list.innerHTML = sortedPosts().map(post => `
-      <div class="post-item ${post.id===selectedId?'active':''}" data-id="${post.id}">
+      <div class="post-item ${post.id === selectedId ? "active" : ""}" data-id="${post.id}">
         <strong>${esc(post.title)}</strong>
-        <span>${esc(post.date)} · ${esc((post.categories||[]).join(', ') || 'Uncategorized')}</span>
+        <span>${esc(post.date)} · ${esc((post.categories || []).join(", ") || "Uncategorized")}${post.featured ? " · Featured" : ""}</span>
       </div>
-    `).join('');
+    `).join("");
   }
 
-  function getSelectedCategories(){
-    return [...form.querySelectorAll('input[name="categories"]:checked')].map(el => el.value);
-  }
-
-  function fill(post){
+  function fill(post) {
     const values = {
       id: post.id,
-      updated: post.updated || post.date,
-      title: post.title || '',
-      slug: post.slug || '',
+      publishedAt: post.publishedAt || "",
+      featuredAt: post.featuredAt || "",
+      externalUrl: post.externalUrl || "",
+      title: post.title || "",
+      slug: post.slug || "",
       date: post.date || new Date().toISOString().slice(0,10),
-      excerpt: post.excerpt || '',
+      excerpt: post.excerpt || "",
       featured: String(!!post.featured),
-      image: post.image || '',
-      externalUrl: post.externalUrl || '',
-      externalTarget: post.externalTarget || 'top'
+      image: post.image || "",
+      externalTarget: post.externalTarget || "top"
     };
-    Object.entries(values).forEach(([name, value]) => { if (form.elements[name]) form.elements[name].value = value; });
-    renderCategoryOptions(post.categories || []);
+    Object.entries(values).forEach(([name,value]) => {
+      if (form.elements[name]) form.elements[name].value = value;
+    });
+    setSelectedCategories(post.categories || []);
     renderPreview();
   }
 
-  function currentPostData(){
-    const f = new FormData(form);
+  function currentPostData() {
+    const formData = new FormData(form);
     const existing = selected() || {};
+    const now = new Date().toISOString();
+    const featured = formData.get("featured") === "true";
     return {
-      id: Number(f.get('id')) || Date.now(),
-      slug: (f.get('slug') || '').trim(),
-      title: (f.get('title') || '').trim(),
-      excerpt: (f.get('excerpt') || '').trim(),
-      date: f.get('date'),
-      updated: new Date().toISOString().slice(0,10),
-      author: existing.author || original.site?.author?.name || 'Editorial Team',
+      id: Number(formData.get("id")) || Date.now(),
+      slug: String(formData.get("slug") || "").trim(),
+      title: String(formData.get("title") || "").trim(),
+      excerpt: String(formData.get("excerpt") || "").trim(),
+      date: formData.get("date"),
+      updated: now.slice(0,10),
+      updatedAt: now,
+      publishedAt: formData.get("publishedAt") || existing.publishedAt || now,
+      featuredAt: featured ? now : "",
+      author: existing.author || original.site?.author?.name || "Editorial Team",
       categories: getSelectedCategories(),
       tags: existing.tags || [],
-      image: (f.get('image') || '').trim(),
-      externalUrl: (f.get('externalUrl') || '').trim(),
-      externalTarget: f.get('externalTarget') || 'top',
-      featured: f.get('featured') === 'true',
+      image: String(formData.get("image") || "").trim(),
+      externalUrl: String(formData.get("externalUrl") || "").trim(),
+      externalTarget: formData.get("externalTarget") || "top",
+      featured,
       rating: existing.rating || 0,
-      review: existing.review || {vendor:'',price:'',type:'Google Sites page',bestFor:''},
-      affiliateUrl: existing.affiliateUrl || '',
-      affiliateLabel: existing.affiliateLabel || 'Visit Page',
-      disclosure: existing.disclosure || 'Some links may be affiliate links.',
+      review: existing.review || { vendor:"", price:"", type:"Google Sites page", bestFor:"" },
+      affiliateUrl: existing.affiliateUrl || "",
+      affiliateLabel: existing.affiliateLabel || "Visit Page",
+      disclosure: existing.disclosure || "Some links may be affiliate links.",
       pros: existing.pros || [],
       cons: existing.cons || [],
-      content: existing.content || ''
+      content: existing.content || ""
     };
   }
 
-  function renderPreview(){
-    const p = currentPostData();
+  function renderPreview() {
+    const post = currentPostData();
     preview.innerHTML = `
       <div class="preview-top">
-        <span class="badge">${esc((p.categories||[])[0] || 'Category')}</span>
-        <h3>${esc(p.title || 'Post title')}</h3>
-        <p>${esc(p.excerpt || 'Short description will appear here.')}</p>
+        <span class="badge">${esc(post.categories?.[0] || "Category")}</span>
+        <h3>${esc(post.title || "Post title")}</h3>
+        <p>${esc(post.excerpt || "Short description will appear here.")}</p>
       </div>
-      ${p.image ? `<img class="preview-img" src="${esc(p.image)}" alt="">` : '<div class="preview-img"></div>'}
+      <img class="preview-img" src="${esc(post.image || "thumbnail-placeholder.svg")}" alt="" onerror="this.onerror=null;this.src='thumbnail-placeholder.svg'">
       <div class="preview-footer">
-        <div class="muted">${esc(p.date || '')} · ${esc((p.categories||[]).join(', '))}</div>
-        ${p.externalUrl ? `<a class="preview-link" href="${esc(p.externalUrl)}" target="_blank" rel="noopener">Open Google Sites page</a>` : '<span class="muted">Add Google Sites URL</span>'}
+        <div class="muted">${esc(post.date || "")} · ${esc((post.categories || []).join(", "))}</div>
+        ${post.externalUrl ? `<a class="preview-link" href="${esc(post.externalUrl)}" target="_blank" rel="noopener">Open Google Sites page</a>` : '<span class="muted">Add Google Sites URL</span>'}
       </div>
     `;
   }
 
-  function serializePostsFile(){
+  function inferCategories(text) {
+    const source = String(text || "").toLowerCase();
+    const found = new Set();
+    const add = (category, words) => {
+      if (words.some(word => source.includes(word))) found.add(category);
+    };
+
+    add("AI Tools", [" ai ", "artificial intelligence", "chatgpt", "automation", "prompt"]);
+    add("Tools & Software", ["software", "tool", "application", "platform", "saas", "app"]);
+    add("WordPress", ["wordpress", "elementor", "plugin", "theme"]);
+    add("Video Marketing", ["youtube", "video", "faceless", "reels", "shorts"]);
+    add("SEO", [" seo ", "keyword", "search engine", "ranking"]);
+    add("SEO & Traffic", ["traffic", "backlink", "search traffic"]);
+    add("Affiliate Marketing", ["affiliate", "warriorplus", "jvzoo", "commission"]);
+    add("PLR", [" plr ", "private label rights", "resell rights"]);
+    add("Digital Marketing", ["digital marketing", "email marketing", "lead generation", "advertising", "ads"]);
+    add("How To", ["how to", "guide", "tutorial", "step by step"]);
+    add("Bonuses", ["bonus", "bonuses"]);
+    if (source.includes("review") || source.includes("pricing") || source.includes("product")) found.add("Product Reviews");
+    if (!found.size) found.add("Product Reviews");
+    return [...found].slice(0, 4);
+  }
+
+  function extractImageCandidates(markdown) {
+    const urls = [];
+    for (const match of markdown.matchAll(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)(?:\s+"[^"]*")?\)/gi)) {
+      urls.push(match[1]);
+    }
+    for (const match of markdown.matchAll(/https?:\/\/[^\s"'<>]+\.(?:png|jpe?g|webp|gif)(?:\?[^\s"'<>]*)?/gi)) {
+      urls.push(match[0]);
+    }
+    for (const match of markdown.matchAll(/https?:\/\/(?:lh\d+|blogger)\.googleusercontent\.com\/[^\s)"'<>]+/gi)) {
+      urls.push(match[0]);
+    }
+    return [...new Set(urls.map(url => url.replace(/[.,;]+$/, "")))]
+      .filter(url => !/favicon|logo|icon|avatar|profile/i.test(url));
+  }
+
+  function isLoadableImage(url, timeout = 8000) {
+    return new Promise(resolve => {
+      const image = new Image();
+      const timer = setTimeout(() => resolve(false), timeout);
+      image.onload = () => {
+        clearTimeout(timer);
+        resolve(image.naturalWidth >= 300 && image.naturalHeight >= 160);
+      };
+      image.onerror = () => {
+        clearTimeout(timer);
+        resolve(false);
+      };
+      image.referrerPolicy = "no-referrer";
+      image.src = url;
+    });
+  }
+
+  async function chooseThumbnail(candidates) {
+    for (const candidate of candidates.slice(0, 15)) {
+      if (await isLoadableImage(candidate)) return candidate;
+    }
+    return "";
+  }
+
+  function parseReaderOutput(output) {
+    const titleMatch = output.match(/^Title:\s*(.+)$/mi);
+    const markdownMarker = output.match(/Markdown Content:\s*/i);
+    const content = markdownMarker ? output.slice(markdownMarker.index + markdownMarker[0].length) : output;
+    const firstHeading = content.match(/^#\s+(.+)$/m);
+    const title = stripMarkdown(titleMatch?.[1] || firstHeading?.[1] || "")
+      .replace(/\s*[-|]\s*Google Sites?\s*$/i, "")
+      .trim();
+
+    const lines = content.split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line =>
+        line &&
+        !/^#{1,6}\s/.test(line) &&
+        !/^!\[/.test(line) &&
+        !/^(home|contact|about|privacy|terms|menu|skip to)/i.test(stripMarkdown(line)) &&
+        stripMarkdown(line).length >= 45
+      );
+
+    const excerpt = toExcerpt(lines.slice(0, 3).join(" "));
+    return {
+      title,
+      excerpt,
+      content,
+      images: extractImageCandidates(content),
+      categories: inferCategories(`${title}\n${content}`)
+    };
+  }
+
+  async function autoFillFromGoogleSites() {
+    const url = form.elements.externalUrl.value.trim();
+    if (!/^https:\/\/sites\.google\.com\//i.test(url)) {
+      status.textContent = "Please paste a published Google Sites URL first.";
+      return;
+    }
+
+    autoImportButton.disabled = true;
+    autoImportButton.textContent = "Reading…";
+    status.textContent = "Reading the Google Sites page and detecting metadata…";
+
+    try {
+      const response = await fetch(`https://r.jina.ai/${url}`, {
+        cache: "no-store",
+        headers: { "Accept": "text/plain" }
+      });
+      if (!response.ok) throw new Error(`Reader returned HTTP ${response.status}`);
+      const output = await response.text();
+      const metadata = parseReaderOutput(output);
+
+      if (metadata.title) {
+        form.elements.title.value = metadata.title;
+        form.elements.slug.value = slugify(metadata.title);
+      }
+      if (metadata.excerpt) form.elements.excerpt.value = metadata.excerpt;
+      form.elements.date.value = new Date().toISOString().slice(0,10);
+      setSelectedCategories(metadata.categories);
+
+      const thumbnail = await chooseThumbnail(metadata.images);
+      if (thumbnail) form.elements.image.value = thumbnail;
+
+      renderPreview();
+      status.textContent = thumbnail
+        ? "Auto-fill complete. Review the fields, then click Save post."
+        : "Text fields were filled. No suitable thumbnail was detected, so you can paste an image URL manually.";
+    } catch (error) {
+      status.textContent = "Auto-fill failed: " + error.message + "\nThe page must be public. You can still enter the fields manually.";
+    } finally {
+      autoImportButton.disabled = false;
+      autoImportButton.textContent = "Auto-fill";
+    }
+  }
+
+  function serializePostsFile() {
     return `/* Exported by DigiReview Quick Publisher */\nwindow.BLOG_DATA = ${JSON.stringify(data, null, 2)};\n`;
   }
 
-  function toBase64(str){
-    return btoa(unescape(encodeURIComponent(str)));
+  function toBase64(value) {
+    return btoa(unescape(encodeURIComponent(value)));
   }
 
-  function ghConfig(){
+  function ghConfig() {
     return {
-      owner: document.getElementById('gh-owner').value.trim(),
-      repo: document.getElementById('gh-repo').value.trim(),
-      branch: document.getElementById('gh-branch').value.trim() || 'main',
-      token: document.getElementById('gh-token').value.trim()
+      owner: document.getElementById("gh-owner").value.trim(),
+      repo: document.getElementById("gh-repo").value.trim(),
+      branch: document.getElementById("gh-branch").value.trim() || "main",
+      token: document.getElementById("gh-token").value.trim()
     };
   }
 
-  function saveGhConfig(){
-    localStorage.setItem('digireview-gh-config', JSON.stringify(ghConfig()));
-    status.textContent = 'GitHub settings saved in this browser.';
+  function saveGhConfig() {
+    localStorage.setItem("digireview-gh-config", JSON.stringify(ghConfig()));
+    status.textContent = "GitHub settings saved in this browser.";
   }
 
-  function loadGhConfig(){
-    const cfg = JSON.parse(localStorage.getItem('digireview-gh-config') || '{}');
-    document.getElementById('gh-owner').value = cfg.owner || '';
-    document.getElementById('gh-repo').value = cfg.repo || '';
-    document.getElementById('gh-branch').value = cfg.branch || 'main';
-    document.getElementById('gh-token').value = cfg.token || '';
+  function loadGhConfig() {
+    const config = JSON.parse(localStorage.getItem("digireview-gh-config") || "{}");
+    document.getElementById("gh-owner").value = config.owner || repositoryDefaults.owner;
+    document.getElementById("gh-repo").value = config.repo || repositoryDefaults.repo;
+    document.getElementById("gh-branch").value = config.branch || repositoryDefaults.branch;
+    document.getElementById("gh-token").value = config.token || "";
   }
 
-  async function publishToGitHub(){
-    const cfg = ghConfig();
-    if(!(cfg.owner && cfg.repo && cfg.token)){
-      status.textContent = 'Saved locally. Add GitHub settings to enable automatic publishing.';
+  async function publishToGitHub() {
+    const config = ghConfig();
+    if (!(config.owner && config.repo && config.token)) {
+      status.textContent = "Saved locally. Add GitHub settings to enable automatic publishing.";
       return false;
     }
+
     saveGhConfig();
-    status.textContent = 'Publishing posts.js to GitHub...';
-    const api = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/posts.js`;
+    status.textContent = "Publishing posts.js to GitHub…";
+
+    const api = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/posts.js`;
     const headers = {
-      'Accept':'application/vnd.github+json',
-      'Authorization':`Bearer ${cfg.token}`,
-      'Content-Type':'application/json'
+      "Accept": "application/vnd.github+json",
+      "Authorization": `Bearer ${config.token}`,
+      "Content-Type": "application/json",
+      "X-GitHub-Api-Version": "2022-11-28"
     };
 
-    let sha = '';
-    const getRes = await fetch(api + `?ref=${encodeURIComponent(cfg.branch)}`, { headers });
-    if (getRes.ok) {
-      const current = await getRes.json();
-      sha = current.sha || '';
-    } else if (getRes.status !== 404) {
-      throw new Error(`GitHub read failed: ${getRes.status}`);
+    let sha = "";
+    const getResponse = await fetch(`${api}?ref=${encodeURIComponent(config.branch)}&v=${Date.now()}`, {
+      headers,
+      cache: "no-store",
+      mode: "cors"
+    });
+    if (getResponse.ok) {
+      const current = await getResponse.json();
+      sha = current.sha || "";
+    } else if (getResponse.status !== 404) {
+      throw new Error(`GitHub read failed: ${getResponse.status}`);
     }
 
     const payload = {
-      message: `Update posts.js via DigiReview Quick Publisher (${new Date().toISOString()})`,
+      message: `Update posts via DigiReview (${new Date().toISOString()})`,
       content: toBase64(serializePostsFile()),
-      branch: cfg.branch
+      branch: config.branch
     };
     if (sha) payload.sha = sha;
 
-    const putRes = await fetch(api, { method:'PUT', headers, body: JSON.stringify(payload) });
-    if (!putRes.ok) {
-      const txt = await putRes.text();
-      throw new Error(`GitHub publish failed: ${putRes.status} ${txt}`);
+    const putResponse = await fetch(api, {
+      method: "PUT",
+      headers,
+      mode: "cors",
+      body: JSON.stringify(payload)
+    });
+    if (!putResponse.ok) {
+      const details = await putResponse.text();
+      throw new Error(`GitHub publish failed: ${putResponse.status} ${details}`);
     }
-    status.textContent = 'Saved and published. GitHub Pages usually refreshes in about 30 to 90 seconds.';
+
+    localStorage.setItem("digireview-admin-data", JSON.stringify(data));
+    status.textContent = "Published successfully. The homepage now reads the newest posts directly from GitHub and will refresh automatically.";
     return true;
   }
 
-  async function savePost({publish=true}={}){
+  async function savePost({ publish = true } = {}) {
     const post = currentPostData();
-    if(!post.title || !post.slug || !post.date || !post.excerpt || !post.externalUrl){
-      status.textContent = 'Please fill in Title, Slug, Date, Excerpt and Google Sites URL.';
+    if (!post.title || !post.slug || !post.date || !post.excerpt || !post.externalUrl) {
+      status.textContent = "Please fill in Title, Slug, Date, Excerpt and Google Sites URL.";
       return;
     }
-    if(!post.categories.length){
-      status.textContent = 'Please choose at least one category.';
+    if (!post.categories.length) {
+      status.textContent = "Please choose at least one category.";
       return;
     }
+
     const index = data.posts.findIndex(item => item.id === post.id);
-    if(index >= 0) data.posts[index] = post;
+    if (index >= 0) data.posts[index] = post;
     else data.posts.push(post);
+
     selectedId = post.id;
-    persist(publish ? 'Post saved locally. Publishing...' : 'Post saved locally.');
+    persist(publish ? "Post saved locally. Publishing…" : "Post saved locally.");
     fill(post);
-    if(publish){
-      try{
+
+    if (publish) {
+      try {
         await publishToGitHub();
-      }catch(err){
-        status.textContent = 'Saved locally, but publish failed: ' + err.message;
+      } catch (error) {
+        status.textContent = "Saved locally, but publish failed: " + error.message;
       }
     }
   }
 
-  list.addEventListener('click', e => {
-    const item = e.target.closest('[data-id]');
-    if(!item) return;
+  list.addEventListener("click", event => {
+    const item = event.target.closest("[data-id]");
+    if (!item) return;
     selectedId = Number(item.dataset.id);
     renderList();
     fill(selected());
   });
 
-  form.elements.title.addEventListener('blur', () => {
-    if(!form.elements.slug.value) form.elements.slug.value = slugify(form.elements.title.value);
+  form.elements.title.addEventListener("blur", () => {
+    if (!form.elements.slug.value) form.elements.slug.value = slugify(form.elements.title.value);
     renderPreview();
   });
-  form.addEventListener('input', renderPreview);
-  form.addEventListener('submit', async e => { e.preventDefault(); await savePost({publish:true}); });
 
-  document.getElementById('save-local-only').addEventListener('click', () => savePost({publish:false}));
+  form.addEventListener("input", renderPreview);
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    await savePost({ publish: true });
+  });
 
-  document.getElementById('new-post').addEventListener('click', () => {
+  form.elements.externalUrl.addEventListener("paste", () => {
+    window.setTimeout(() => {
+      if (/^https:\/\/sites\.google\.com\//i.test(form.elements.externalUrl.value.trim())) {
+        autoFillFromGoogleSites();
+      }
+    }, 150);
+  });
+
+  form.elements.externalUrl.addEventListener("change", () => {
+    if (/^https:\/\/sites\.google\.com\//i.test(form.elements.externalUrl.value.trim())) {
+      autoFillFromGoogleSites();
+    }
+  });
+
+  autoImportButton.addEventListener("click", autoFillFromGoogleSites);
+
+  document.getElementById("save-local-only").addEventListener("click", () => savePost({ publish: false }));
+
+  document.getElementById("new-post").addEventListener("click", () => {
+    const now = new Date();
     const post = {
       id: Date.now(),
-      slug: '',
-      title: '',
-      excerpt: '',
-      date: new Date().toISOString().slice(0,10),
-      updated: new Date().toISOString().slice(0,10),
-      author: original.site?.author?.name || 'Editorial Team',
-      categories: ['Product Reviews'],
+      slug: "",
+      title: "",
+      excerpt: "",
+      date: now.toISOString().slice(0,10),
+      updated: now.toISOString().slice(0,10),
+      updatedAt: now.toISOString(),
+      publishedAt: now.toISOString(),
+      featuredAt: "",
+      author: original.site?.author?.name || "Editorial Team",
+      categories: ["Product Reviews"],
       tags: [],
-      image: '',
-      externalUrl: '',
-      externalTarget: 'top',
+      image: "",
+      externalUrl: "",
+      externalTarget: "top",
       featured: false,
       rating: 0,
-      review: {vendor:'',price:'',type:'Google Sites page',bestFor:''},
-      affiliateUrl: '',
-      affiliateLabel: 'Visit Page',
-      disclosure: 'Some links may be affiliate links.',
+      review: { vendor:"", price:"", type:"Google Sites page", bestFor:"" },
+      affiliateUrl: "",
+      affiliateLabel: "Visit Page",
+      disclosure: "Some links may be affiliate links.",
       pros: [],
       cons: [],
-      content: ''
+      content: ""
     };
     data.posts.push(post);
     selectedId = post.id;
-    persist('New draft created locally.');
+    persist("New draft created locally.");
     fill(post);
+    form.elements.externalUrl.focus();
   });
 
-  document.getElementById('delete-post').addEventListener('click', async () => {
-    if(!selectedId || !confirm('Delete this post?')) return;
+  document.getElementById("delete-post").addEventListener("click", async () => {
+    if (!selectedId || !confirm("Delete this post?")) return;
     data.posts = data.posts.filter(post => post.id !== selectedId);
     selectedId = data.posts[0]?.id || null;
-    persist('Post deleted locally.');
-    if(selected()) fill(selected()); else { form.reset(); renderCategoryOptions([]); renderPreview(); }
-    try{
+    persist("Post deleted locally.");
+    if (selected()) fill(selected());
+    try {
       await publishToGitHub();
-    }catch(err){
-      status.textContent = 'Post deleted locally, but publish failed: ' + err.message;
+    } catch (error) {
+      status.textContent = "Deleted locally, but publish failed: " + error.message;
     }
   });
 
-  document.getElementById('export-file').addEventListener('click', () => {
-    const text = serializePostsFile();
-    const blob = new Blob([text], {type:'application/javascript'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'posts.js';
-    a.click();
-    URL.revokeObjectURL(a.href);
-    status.textContent = 'posts.js exported.';
+  document.getElementById("export-file").addEventListener("click", () => {
+    const blob = new Blob([serializePostsFile()], { type: "application/javascript" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "posts.js";
+    link.click();
+    URL.revokeObjectURL(link.href);
+    status.textContent = "posts.js exported.";
   });
 
-  document.getElementById('import-file').addEventListener('click', () => fileInput.click());
-  fileInput.addEventListener('change', async e => {
-    const file = e.target.files[0];
-    if(!file) return;
+  document.getElementById("import-file").addEventListener("click", () => fileInput.click());
+
+  fileInput.addEventListener("change", async event => {
+    const file = event.target.files[0];
+    if (!file) return;
     const text = await file.text();
-    try{
+    try {
       let parsed;
-      if(file.name.endsWith('.json')) parsed = JSON.parse(text);
-      else{
+      if (file.name.endsWith(".json")) {
+        parsed = JSON.parse(text);
+      } else {
         const match = text.match(/window\.BLOG_DATA\s*=\s*([\s\S]*);\s*$/);
-        if(!match) throw new Error('BLOG_DATA not found');
-        parsed = Function(`"use strict";return (${match[1]})`)();
+        if (!match) throw new Error("BLOG_DATA not found");
+        parsed = Function(`"use strict"; return (${match[1]})`)();
       }
-      if(!parsed.posts) throw new Error('posts missing');
+      if (!parsed.posts) throw new Error("posts missing");
       data = parsed;
       selectedId = data.posts[0]?.id || null;
-      persist('Imported into the editor.');
-      if(selected()) fill(selected()); else { renderCategoryOptions([]); renderPreview(); }
-    }catch(err){
-      status.textContent = 'Import failed: ' + err.message;
+      persist("File imported.");
+      if (selected()) fill(selected());
+    } catch (error) {
+      status.textContent = "Import failed: " + error.message;
     }
   });
 
-  document.getElementById('save-gh-config').addEventListener('click', saveGhConfig);
-  document.getElementById('test-publish').addEventListener('click', async () => {
-    try{
+  document.getElementById("save-gh-config").addEventListener("click", saveGhConfig);
+
+  document.getElementById("test-publish").addEventListener("click", async () => {
+    try {
       saveGhConfig();
-      status.textContent = 'Testing GitHub connection...';
-      const cfg = ghConfig();
-      const res = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}`, {
-        headers: {'Accept':'application/vnd.github+json','Authorization':`Bearer ${cfg.token}`}
+      const config = ghConfig();
+      status.textContent = "Testing GitHub connection…";
+      const response = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}?v=${Date.now()}`, {
+        headers: {
+          "Accept": "application/vnd.github+json",
+          "Authorization": `Bearer ${config.token}`,
+          "X-GitHub-Api-Version": "2022-11-28"
+        },
+        cache: "no-store",
+        mode: "cors"
       });
-      if(!res.ok) throw new Error('Cannot access this repository.');
-      status.textContent = 'GitHub connection looks good. Save post will now auto publish.';
-    }catch(err){
-      status.textContent = 'GitHub test failed: ' + err.message;
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      status.textContent = "GitHub connection is working.";
+    } catch (error) {
+      status.textContent = "GitHub test failed: " + error.message;
     }
   });
 
   loadGhConfig();
   renderList();
-  if(selected()) fill(selected());
-  else { renderCategoryOptions([]); renderPreview(); }
+  if (selected()) fill(selected());
+  status.textContent = "Ready. Paste a published Google Sites URL to auto-fill the post.";
 })();
 </script>
 </body>

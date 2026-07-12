@@ -35,7 +35,19 @@
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
-  const sortedPosts = () => posts.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+  const postTimestamp = (post) => {
+    const value = post.publishedAt || post.updatedAt || post.updated || `${post.date || "1970-01-01"}T00:00:00`;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const featuredTimestamp = (post) => {
+    const value = post.featuredAt || post.publishedAt || post.updatedAt || post.updated || `${post.date || "1970-01-01"}T00:00:00`;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const sortedPosts = () => posts.slice().sort((a, b) => postTimestamp(b) - postTimestamp(a) || Number(b.id || 0) - Number(a.id || 0));
   const getPost = (slug) => posts.find(post => post.slug === slug);
 
   // A post can either be rendered inside this blog or point to an existing
@@ -115,7 +127,7 @@
 
   const postCard = (post) => `
     <article class="post-card">
-      <a href="${postHref(post)}"${postTargetAttrs(post)}><img class="card-image" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" loading="lazy"></a>
+      <a href="${postHref(post)}"${postTargetAttrs(post)}><img class="card-image" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" loading="lazy" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'"></a>
       <div class="card-body">
         <span class="category-pill">${escapeHtml(post.categories?.[0] || "Article")}</span>
         <h3><a href="${postHref(post)}"${postTargetAttrs(post)}>${escapeHtml(post.title)}</a></h3>
@@ -127,7 +139,7 @@
 
   const recentPostsMarkup = () => sortedPosts().slice(0, 5).map(post => `
     <a class="recent-item" href="${postHref(post)}"${postTargetAttrs(post)}>
-      <img src="${escapeHtml(post.image)}" alt="" loading="lazy">
+      <img src="${escapeHtml(post.image)}" alt="" loading="lazy" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'">
       <span><strong>${escapeHtml(post.title)}</strong><span>${formatDate(post.date)}</span></span>
     </a>`).join("");
 
@@ -163,7 +175,10 @@
     </aside>`;
 
   const featuredMarkup = () => {
-    const featured = sortedPosts().filter(post => post.featured).slice(0, 3);
+    const featured = posts
+      .filter(post => post.featured)
+      .sort((a, b) => featuredTimestamp(b) - featuredTimestamp(a) || postTimestamp(b) - postTimestamp(a))
+      .slice(0, 3);
     const fallback = sortedPosts().slice(0, 3);
     const selected = featured.length >= 3 ? featured : fallback;
     if (!selected.length) return "";
@@ -171,7 +186,7 @@
     return `
       <div class="featured-grid">
         <article class="featured-card main">
-          <a href="${postHref(main)}"${postTargetAttrs(main)}><img class="card-image" src="${escapeHtml(main.image)}" alt="${escapeHtml(main.title)}"></a>
+          <a href="${postHref(main)}"${postTargetAttrs(main)}><img class="card-image" src="${escapeHtml(main.image)}" alt="${escapeHtml(main.title)}" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'"></a>
           <div class="card-body">
             <span class="category-pill">${escapeHtml(main.categories?.[0] || "Featured")}</span>
             <h2><a href="${postHref(main)}"${postTargetAttrs(main)}>${escapeHtml(main.title)}</a></h2>
@@ -182,7 +197,7 @@
         <div class="featured-side">
           ${side.map(post => `
             <article class="featured-card compact">
-              <a href="${postHref(post)}"${postTargetAttrs(post)}><img class="card-image" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}"></a>
+              <a href="${postHref(post)}"${postTargetAttrs(post)}><img class="card-image" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'"></a>
               <div class="card-body">
                 <span class="category-pill">${escapeHtml(post.categories?.[0] || "Featured")}</span>
                 <h3><a href="${postHref(post)}"${postTargetAttrs(post)}>${escapeHtml(post.title)}</a></h3>
@@ -357,7 +372,7 @@
                 <p class="article-deck">${escapeHtml(post.excerpt)}</p>
                 <div class="post-meta"><span>By ${escapeHtml(post.author || site.author?.name || "Editorial Team")}</span><span>${formatDate(post.date)}</span><span>${postReadLabel(post)}</span><span>${views} local views</span></div>
               </header>
-              <img class="article-hero" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}">
+              <img class="article-hero" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'">
               <div class="disclosure"><strong>Disclosure:</strong> ${escapeHtml(post.disclosure || "This article may contain affiliate links.")}</div>
               <div id="toc-container"></div>
               ${renderReviewBox(post)}
@@ -369,7 +384,7 @@
               <section class="rating-box"><strong>Was this article helpful?</strong><div class="rating-stars" data-rating-slug="${escapeHtml(post.slug)}">${[1,2,3,4,5].map(star => `<button type="button" data-rating="${star}" aria-label="Rate ${star} out of 5">★</button>`).join("")}</div><small id="rating-message">Your rating is stored in this browser.</small></section>
               <section class="author-box"><img class="author-avatar" src="${escapeHtml(site.author?.avatar || post.image)}" alt="${escapeHtml(site.author?.name || post.author || "Author")}"><div><h2>About ${escapeHtml(site.author?.name || post.author || "the author")}</h2><p>${escapeHtml(site.author?.bio || "Editorial author profile.")}</p></div></section>
               <section class="comments-box"><h2>Comments</h2>${commentsMarkup(post)}</section>
-              ${related.length ? `<section class="section"><div class="section-heading"><div><h2>Related posts</h2></div></div><div class="related-grid">${related.map(item => `<a class="related-card" href="${postHref(item)}"${postTargetAttrs(item)}><img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy"><div><span class="category-pill">${escapeHtml(item.categories?.[0] || "Article")}</span><strong>${escapeHtml(item.title)}</strong></div></a>`).join("")}</div></section>` : ""}
+              ${related.length ? `<section class="section"><div class="section-heading"><div><h2>Related posts</h2></div></div><div class="related-grid">${related.map(item => `<a class="related-card" href="${postHref(item)}"${postTargetAttrs(item)}><img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'"><div><span class="category-pill">${escapeHtml(item.categories?.[0] || "Article")}</span><strong>${escapeHtml(item.title)}</strong></div></a>`).join("")}</div></section>` : ""}
             </div>
             <aside class="article-sidebar">
               <section class="sidebar-widget"><h2>Share this article</h2><div class="share-row"><button type="button" data-share="copy">Copy link</button><a target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(location.href)}">Facebook</a><a target="_blank" rel="noopener" href="https://twitter.com/intent/tweet?url=${encodeURIComponent(location.href)}&text=${encodeURIComponent(post.title)}">X</a><a target="_blank" rel="noopener" href="https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(location.href)}">LinkedIn</a></div></section>
@@ -574,15 +589,45 @@
       event.currentTarget.setAttribute("aria-expanded", String(isOpen));
     });
 
+    const closeDropdowns = (except = null) => {
+      document.querySelectorAll(".nav-dropdown.open").forEach(dropdown => {
+        if (dropdown === except) return;
+        dropdown.classList.remove("open");
+        dropdown.querySelector(":scope > button")?.setAttribute("aria-expanded", "false");
+      });
+    };
+
     document.querySelectorAll(".nav-dropdown > button").forEach(button => button.addEventListener("click", event => {
       event.preventDefault();
+      event.stopPropagation();
       const dropdown = button.closest(".nav-dropdown");
-      const isOpen = dropdown.classList.toggle("open");
-      button.setAttribute("aria-expanded", String(isOpen));
+      const willOpen = !dropdown.classList.contains("open");
+      closeDropdowns(dropdown);
+      dropdown.classList.toggle("open", willOpen);
+      button.setAttribute("aria-expanded", String(willOpen));
     }));
 
     document.addEventListener("click", event => {
-      if (event.target.closest("#primary-nav a")) document.getElementById("primary-nav").classList.remove("open");
+      const nav = document.getElementById("primary-nav");
+      const menuToggle = document.getElementById("menu-toggle");
+      const clickedInsideDropdown = event.target.closest(".nav-dropdown");
+
+      if (!clickedInsideDropdown) closeDropdowns();
+
+      if (event.target.closest("#primary-nav a")) {
+        nav.classList.remove("open");
+        menuToggle.setAttribute("aria-expanded", "false");
+        closeDropdowns();
+        return;
+      }
+
+      if (window.innerWidth <= 760 &&
+          !event.target.closest("#primary-nav") &&
+          !event.target.closest("#menu-toggle")) {
+        nav.classList.remove("open");
+        menuToggle.setAttribute("aria-expanded", "false");
+        closeDropdowns();
+      }
     });
 
     document.getElementById("open-search").addEventListener("click", () => {
@@ -611,9 +656,49 @@
 
   };
 
-  window.addEventListener("hashchange", route);
-  window.addEventListener("DOMContentLoaded", () => {
+  const currentPostsSignature = () => JSON.stringify(
+    (window.BLOG_DATA?.posts || []).map(post => [
+      post.id, post.slug, post.updatedAt, post.publishedAt, post.featuredAt, post.featured
+    ])
+  );
+
+  const checkForPostUpdates = async () => {
+    const repository = window.BLOG_REPOSITORY;
+    if (!repository?.owner || !repository?.repo) return;
+    try {
+      const url = `https://raw.githubusercontent.com/${repository.owner}/${repository.repo}/${repository.branch || "main"}/posts.js?v=${Date.now()}`;
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) return;
+      const source = await response.text();
+      const sandbox = {};
+      Function("window", source)(sandbox);
+      const nextSignature = JSON.stringify(
+        (sandbox.BLOG_DATA?.posts || []).map(post => [
+          post.id, post.slug, post.updatedAt, post.publishedAt, post.featuredAt, post.featured
+        ])
+      );
+      if (nextSignature && nextSignature !== currentPostsSignature()) {
+        location.reload();
+      }
+    } catch (error) {
+      console.debug("Post refresh check skipped", error);
+    }
+  };
+
+  const startApp = () => {
     initChrome();
     route();
-  });
+    window.setInterval(checkForPostUpdates, 45000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") checkForPostUpdates();
+    });
+    window.addEventListener("focus", checkForPostUpdates);
+  };
+
+  window.addEventListener("hashchange", route);
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", startApp, { once: true });
+  } else {
+    startApp();
+  }
 })();
