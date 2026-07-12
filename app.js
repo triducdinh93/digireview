@@ -38,6 +38,23 @@
   const sortedPosts = () => posts.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
   const getPost = (slug) => posts.find(post => post.slug === slug);
 
+  // A post can either be rendered inside this blog or point to an existing
+  // published Google Sites page.
+  const postHref = (post) => post.externalUrl
+    ? escapeHtml(post.externalUrl)
+    : `#post=${encodeURIComponent(post.slug)}`;
+
+  // "_top" is recommended when this blog is embedded as a full page in
+  // Google Sites because it replaces the parent Google Sites page instead of
+  // opening a nested iframe.
+  const postTargetAttrs = (post) => post.externalUrl
+    ? ` target="${post.externalTarget === "blank" ? "_blank" : "_top"}" rel="noopener"`
+    : "";
+
+  const postReadLabel = (post) => post.externalUrl
+    ? "Google Sites page"
+    : `${readTime(post)} min read`;
+
   const showToast = (message) => {
     toast.textContent = message;
     toast.classList.add("show");
@@ -83,18 +100,18 @@
 
   const postCard = (post) => `
     <article class="post-card">
-      <a href="#post=${encodeURIComponent(post.slug)}"><img class="card-image" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" loading="lazy"></a>
+      <a href="${postHref(post)}"${postTargetAttrs(post)}><img class="card-image" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" loading="lazy"></a>
       <div class="card-body">
         <span class="category-pill">${escapeHtml(post.categories?.[0] || "Article")}</span>
-        <h3><a href="#post=${encodeURIComponent(post.slug)}">${escapeHtml(post.title)}</a></h3>
+        <h3><a href="${postHref(post)}"${postTargetAttrs(post)}>${escapeHtml(post.title)}</a></h3>
         <p>${escapeHtml(post.excerpt)}</p>
-        <div class="post-meta"><span>${formatDate(post.date)}</span><span>${readTime(post)} min read</span></div>
-        <a class="read-more" href="#post=${encodeURIComponent(post.slug)}">Read more →</a>
+        <div class="post-meta"><span>${formatDate(post.date)}</span><span>${postReadLabel(post)}</span></div>
+        <a class="read-more" href="${postHref(post)}"${postTargetAttrs(post)}>${post.externalUrl ? "Open page" : "Read more"} →</a>
       </div>
     </article>`;
 
   const recentPostsMarkup = () => sortedPosts().slice(0, 5).map(post => `
-    <a class="recent-item" href="#post=${encodeURIComponent(post.slug)}">
+    <a class="recent-item" href="${postHref(post)}"${postTargetAttrs(post)}>
       <img src="${escapeHtml(post.image)}" alt="" loading="lazy">
       <span><strong>${escapeHtml(post.title)}</strong><span>${formatDate(post.date)}</span></span>
     </a>`).join("");
@@ -139,21 +156,21 @@
     return `
       <div class="featured-grid">
         <article class="featured-card main">
-          <a href="#post=${encodeURIComponent(main.slug)}"><img class="card-image" src="${escapeHtml(main.image)}" alt="${escapeHtml(main.title)}"></a>
+          <a href="${postHref(main)}"${postTargetAttrs(main)}><img class="card-image" src="${escapeHtml(main.image)}" alt="${escapeHtml(main.title)}"></a>
           <div class="card-body">
             <span class="category-pill">${escapeHtml(main.categories?.[0] || "Featured")}</span>
-            <h2><a href="#post=${encodeURIComponent(main.slug)}">${escapeHtml(main.title)}</a></h2>
+            <h2><a href="${postHref(main)}"${postTargetAttrs(main)}>${escapeHtml(main.title)}</a></h2>
             <p>${escapeHtml(main.excerpt)}</p>
-            <div class="post-meta"><span>${formatDate(main.date)}</span><span>${readTime(main)} min read</span></div>
+            <div class="post-meta"><span>${formatDate(main.date)}</span><span>${postReadLabel(main)}</span></div>
           </div>
         </article>
         <div class="featured-side">
           ${side.map(post => `
             <article class="featured-card compact">
-              <a href="#post=${encodeURIComponent(post.slug)}"><img class="card-image" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}"></a>
+              <a href="${postHref(post)}"${postTargetAttrs(post)}><img class="card-image" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}"></a>
               <div class="card-body">
                 <span class="category-pill">${escapeHtml(post.categories?.[0] || "Featured")}</span>
-                <h3><a href="#post=${encodeURIComponent(post.slug)}">${escapeHtml(post.title)}</a></h3>
+                <h3><a href="${postHref(post)}"${postTargetAttrs(post)}>${escapeHtml(post.title)}</a></h3>
                 <p>${escapeHtml(post.excerpt)}</p>
                 <div class="post-meta"><span>${formatDate(post.date)}</span></div>
               </div>
@@ -308,7 +325,7 @@
 
   const commentsMarkup = (post) => {
     if (site.comments?.provider !== "giscus" || !site.comments.repo || !site.comments.repoId) {
-      return `<div class="comments-placeholder"><strong>Comments are ready to connect.</strong><p>Open <code>data/posts.js</code> and add your Giscus repository values to enable a real comment system.</p></div>`;
+      return `<div class="comments-placeholder"><strong>Comments are ready to connect.</strong><p>Open <code>posts.js</code> and add your Giscus repository values to enable a real comment system.</p></div>`;
     }
     return `<div id="giscus-container" data-post-slug="${escapeHtml(post.slug)}"></div>`;
   };
@@ -329,7 +346,7 @@
                 <span class="category-pill">${escapeHtml(post.categories?.[0] || "Review")}</span>
                 <h1>${escapeHtml(post.title)}</h1>
                 <p class="article-deck">${escapeHtml(post.excerpt)}</p>
-                <div class="post-meta"><span>By ${escapeHtml(post.author || site.author?.name || "Editorial Team")}</span><span>${formatDate(post.date)}</span><span>${readTime(post)} min read</span><span>${views} local views</span></div>
+                <div class="post-meta"><span>By ${escapeHtml(post.author || site.author?.name || "Editorial Team")}</span><span>${formatDate(post.date)}</span><span>${postReadLabel(post)}</span><span>${views} local views</span></div>
               </header>
               <img class="article-hero" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}">
               <div class="disclosure"><strong>Disclosure:</strong> ${escapeHtml(post.disclosure || "This article may contain affiliate links.")}</div>
@@ -343,7 +360,7 @@
               <section class="rating-box"><strong>Was this article helpful?</strong><div class="rating-stars" data-rating-slug="${escapeHtml(post.slug)}">${[1,2,3,4,5].map(star => `<button type="button" data-rating="${star}" aria-label="Rate ${star} out of 5">★</button>`).join("")}</div><small id="rating-message">Your rating is stored in this browser.</small></section>
               <section class="author-box"><img class="author-avatar" src="${escapeHtml(site.author?.avatar || post.image)}" alt="${escapeHtml(site.author?.name || post.author || "Author")}"><div><h2>About ${escapeHtml(site.author?.name || post.author || "the author")}</h2><p>${escapeHtml(site.author?.bio || "Editorial author profile.")}</p></div></section>
               <section class="comments-box"><h2>Comments</h2>${commentsMarkup(post)}</section>
-              ${related.length ? `<section class="section"><div class="section-heading"><div><h2>Related posts</h2></div></div><div class="related-grid">${related.map(item => `<a class="related-card" href="#post=${encodeURIComponent(item.slug)}"><img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy"><div><span class="category-pill">${escapeHtml(item.categories?.[0] || "Article")}</span><strong>${escapeHtml(item.title)}</strong></div></a>`).join("")}</div></section>` : ""}
+              ${related.length ? `<section class="section"><div class="section-heading"><div><h2>Related posts</h2></div></div><div class="related-grid">${related.map(item => `<a class="related-card" href="${postHref(item)}"${postTargetAttrs(item)}><img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy"><div><span class="category-pill">${escapeHtml(item.categories?.[0] || "Article")}</span><strong>${escapeHtml(item.title)}</strong></div></a>`).join("")}</div></section>` : ""}
             </div>
             <aside class="article-sidebar">
               <section class="sidebar-widget"><h2>Share this article</h2><div class="share-row"><button type="button" data-share="copy">Copy link</button><a target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(location.href)}">Facebook</a><a target="_blank" rel="noopener" href="https://twitter.com/intent/tweet?url=${encodeURIComponent(location.href)}&text=${encodeURIComponent(post.title)}">X</a><a target="_blank" rel="noopener" href="https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(location.href)}">LinkedIn</a></div></section>
@@ -474,7 +491,7 @@
     const email = new FormData(form).get("email")?.toString().trim();
     if (!email) return;
     if (!site.newsletterEndpoint) {
-      showToast("Add your Formspree or newsletter endpoint in data/posts.js.");
+      showToast("Add your Formspree or newsletter endpoint in posts.js.");
       return;
     }
     try {
@@ -489,7 +506,7 @@
     event.preventDefault();
     const form = event.currentTarget;
     if (!site.contactEndpoint) {
-      showToast("Add your contact form endpoint in data/posts.js.");
+      showToast("Add your contact form endpoint in posts.js.");
       return;
     }
     try {
@@ -519,7 +536,7 @@
     const q = query.trim().toLowerCase();
     if (!q) { target.innerHTML = ""; return; }
     const results = sortedPosts().filter(post => [post.title, post.excerpt, ...(post.categories || []), ...(post.tags || [])].join(" ").toLowerCase().includes(q)).slice(0, 6);
-    target.innerHTML = results.length ? results.map(post => `<a class="live-result" href="#post=${encodeURIComponent(post.slug)}"><img src="${escapeHtml(post.image)}" alt=""><span><strong>${escapeHtml(post.title)}</strong><span>${escapeHtml(post.categories?.[0] || "Article")}</span></span></a>`).join("") : `<p>No matching articles.</p>`;
+    target.innerHTML = results.length ? results.map(post => `<a class="live-result" href="${postHref(post)}"${postTargetAttrs(post)}><img src="${escapeHtml(post.image)}" alt=""><span><strong>${escapeHtml(post.title)}</strong><span>${escapeHtml(post.categories?.[0] || "Article")}</span></span></a>`).join("") : `<p>No matching articles.</p>`;
   };
 
   const scrollTop = () => window.scrollTo({ top: 0, behavior: "auto" });
