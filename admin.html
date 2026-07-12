@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script src="services-config.js?v=6.0.0"></script>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-M4Y6KM52WG"></script>
 <script>
@@ -179,7 +180,10 @@
   ];
 
   const savedLocal = localStorage.getItem("digireview-admin-data");
-  let data = savedLocal ? JSON.parse(savedLocal) : JSON.parse(JSON.stringify(original));
+  const hasUnsyncedLocalDraft = localStorage.getItem("digireview-admin-dirty") === "true";
+  let data = hasUnsyncedLocalDraft && savedLocal
+    ? JSON.parse(savedLocal)
+    : JSON.parse(JSON.stringify(original));
   let selectedId = data.posts[0]?.id || null;
 
   const list = document.getElementById("post-list");
@@ -194,8 +198,9 @@
   const postTime = post => Date.parse(post.publishedAt || post.updatedAt || post.updated || `${post.date || "1970-01-01"}T00:00:00`) || 0;
   const sortedPosts = () => data.posts.slice().sort((a,b) => postTime(b) - postTime(a) || Number(b.id||0)-Number(a.id||0));
 
-  const persist = message => {
+  const persist = (message, dirty = true) => {
     localStorage.setItem("digireview-admin-data", JSON.stringify(data));
+    localStorage.setItem("digireview-admin-dirty", dirty ? "true" : "false");
     status.textContent = message;
     renderList();
   };
@@ -263,7 +268,7 @@
       updatedAt: now,
       publishedAt: formData.get("publishedAt") || existing.publishedAt || now,
       featuredAt: featured ? now : "",
-      author: existing.author || original.site?.author?.name || "Editorial Team",
+      author: "Nesi",
       categories: getSelectedCategories(),
       tags: existing.tags || [],
       image: String(formData.get("image") || "").trim(),
@@ -271,10 +276,10 @@
       externalTarget: formData.get("externalTarget") || "top",
       featured,
       rating: existing.rating || 0,
-      review: existing.review || { vendor:"", price:"", type:"Google Sites page", bestFor:"" },
+      review: existing.review || { vendor:"", price:"", type:"", bestFor:"" },
       affiliateUrl: existing.affiliateUrl || "",
       affiliateLabel: existing.affiliateLabel || "Visit Page",
-      disclosure: existing.disclosure || "Some links may be affiliate links.",
+      disclosure: "",
       pros: existing.pros || [],
       cons: existing.cons || [],
       content: String(formData.get("content") || existing.content || "")
@@ -535,6 +540,57 @@
     };
   }
 
+  async function fetchGoogleSiteSource(url) {
+    const configuredEndpoint = String(window.DIGIREVIEW_SERVICES?.extractorEndpoint || "").trim();
+
+    if (configuredEndpoint) {
+      try {
+        const response = await fetch(configuredEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify({ url })
+        });
+        if (response.ok) {
+          const payload = await response.json();
+          if (String(payload.markdown || "").trim().length > 300) {
+            return { markdown: payload.markdown, htmlSource: payload.html || "", metadata: payload.metadata || {} };
+          }
+        }
+      } catch (error) {
+        console.warn("Configured extractor failed.", error);
+      }
+    }
+
+    const hostPath = url.replace(/^https?:\/\//i, "");
+    const candidates = [
+      `https://r.jina.ai/${url}`,
+      `https://r.jina.ai/http://${hostPath}`,
+      `https://s.jina.ai/?q=${encodeURIComponent(url)}`
+    ];
+
+    let best = "";
+    for (const candidate of candidates) {
+      try {
+        const response = await fetch(candidate, {
+          method: "GET",
+          headers: { "Accept": "text/plain" },
+          cache: "no-store"
+        });
+        if (!response.ok) continue;
+        const text = await response.text();
+        if (text.length > best.length) best = text;
+        if (stripMarkdown(text).split(/\s+/).length > 180) break;
+      } catch (error) {
+        console.warn("Reader candidate failed:", candidate, error);
+      }
+    }
+
+    if (stripMarkdown(best).split(/\s+/).length < 45) {
+      throw new Error("The page could not be extracted in the browser. Deploy the included Supabase extractor and enter its endpoint in services-config.js.");
+    }
+    return { markdown: best, htmlSource: "", metadata: {} };
+  }
+
   async function autoFillFromGoogleSites() {
     const url = form.elements.externalUrl.value.trim();
     if (!/^https:\/\/sites\.google\.com\//i.test(url)) {
@@ -544,88 +600,53 @@
 
     autoImportButton.disabled = true;
     autoImportButton.textContent = "Reading…";
-    status.textContent = "Reading the Google Sites page and detecting metadata…";
+    status.textContent = "Reading the Google Sites page and extracting its article content…";
 
     try {
-      const readerUrl = `https://r.jina.ai/${url}`;
-      const commonHeaders = {
-        "X-No-Cache": "true",
-        "X-Cache-Tolerance": "0",
-        "X-With-Images-Summary": "true"
-      };
+      const result = await fetchGoogleSiteSource(url);
+      const metadata = parseReaderOutput(result.markdown, result.metadata || {});
 
-      const [jsonResult, htmlResult] = await Promise.allSettled([
-        fetch(readerUrl, {
-          cache: "no-store",
-          headers: { ...commonHeaders, "Accept": "application/json" }
-        }),
-        fetch(readerUrl, {
-          cache: "no-store",
-          headers: { ...commonHeaders, "Accept": "text/plain", "X-Respond-With": "html" }
-        })
-      ]);
-
-      let readerPayload = {};
-      let markdown = "";
-      let htmlSource = "";
-
-      if (jsonResult.status === "fulfilled" && jsonResult.value.ok) {
-        const contentType = jsonResult.value.headers.get("content-type") || "";
-        if (contentType.includes("application/json")) {
-          readerPayload = await jsonResult.value.json();
-          markdown = readerPayload.data?.content || readerPayload.content || "";
-        } else {
-          markdown = await jsonResult.value.text();
-        }
+      if (!metadata.title && !metadata.excerpt) {
+        throw new Error("The extractor reached the page but did not return readable article text.");
       }
-
-      if (!markdown) {
-        const fallback = await fetch(readerUrl, {
-          cache: "no-store",
-          headers: { ...commonHeaders, "Accept": "text/plain" }
-        });
-        if (!fallback.ok) throw new Error(`Reader returned HTTP ${fallback.status}`);
-        markdown = await fallback.text();
-      }
-
-      if (htmlResult.status === "fulfilled" && htmlResult.value.ok) {
-        htmlSource = await htmlResult.value.text();
-      }
-
-      const metadata = parseReaderOutput(markdown, {
-        title: readerPayload.data?.title || readerPayload.title || "",
-        description: readerPayload.data?.description || readerPayload.description || ""
-      });
 
       if (metadata.title) {
         form.elements.title.value = metadata.title;
         form.elements.slug.value = slugify(metadata.title);
       }
-      if (metadata.excerpt) form.elements.excerpt.value = metadata.excerpt;
+      if (metadata.excerpt) {
+        form.elements.excerpt.value = metadata.excerpt;
+      } else {
+        const fallbackExcerpt = toExcerpt(stripMarkdown(metadata.content));
+        if (fallbackExcerpt) form.elements.excerpt.value = fallbackExcerpt;
+      }
+
       form.elements.date.value = new Date().toISOString().slice(0,10);
       setSelectedCategories(metadata.categories);
 
       const candidates = extractImageCandidates(
-        markdown,
-        htmlSource,
-        JSON.stringify(readerPayload.data?.images || readerPayload.images || [])
+        result.markdown,
+        result.htmlSource,
+        JSON.stringify(result.metadata || {})
       );
       const thumbnail = await chooseThumbnail(candidates);
       if (thumbnail) form.elements.image.value = thumbnail;
 
-      form.elements.content.value = markdownToArticleHtml(
+      const articleHtml = markdownToArticleHtml(
         metadata.content,
         metadata.title,
         thumbnail
       );
+      if (stripMarkdown(articleHtml).split(/\s+/).length < 45) {
+        throw new Error("Only a short link block was returned instead of the full article.");
+      }
+      form.elements.content.value = articleHtml;
 
       renderPreview();
-      const wordCount = stripMarkdown(metadata.content).split(/\s+/).filter(Boolean).length;
-      status.textContent = thumbnail
-        ? `Auto-fill complete. Imported about ${wordCount} words and selected the first large Google Sites product image as thumbnail. Review the fields, then click Save post.`
-        : `Imported about ${wordCount} words. No suitable large image was detected, so paste the product image URL manually before saving.`;
+      const wordCount = stripMarkdown(articleHtml).split(/\s+/).filter(Boolean).length;
+      status.textContent = `Auto-fill complete. Imported approximately ${wordCount} words${thumbnail ? " and selected a large product image" : ""}. Review the fields, then click Save post.`;
     } catch (error) {
-      status.textContent = "Auto-fill failed: " + error.message + "\nThe page must be public. You can still enter the fields manually.";
+      status.textContent = "Auto-fill failed: " + error.message;
     } finally {
       autoImportButton.disabled = false;
       autoImportButton.textContent = "Auto-fill";
@@ -712,6 +733,7 @@
     }
 
     localStorage.setItem("digireview-admin-data", JSON.stringify(data));
+    localStorage.setItem("digireview-admin-dirty", "false");
     status.textContent = "Published successfully. The homepage now reads the newest posts directly from GitHub and will refresh automatically.";
     return true;
   }
@@ -793,7 +815,7 @@
       updatedAt: now.toISOString(),
       publishedAt: now.toISOString(),
       featuredAt: "",
-      author: original.site?.author?.name || "Editorial Team",
+      author: "Nesi",
       categories: ["Product Reviews"],
       tags: [],
       image: "",
@@ -801,10 +823,10 @@
       externalTarget: "top",
       featured: false,
       rating: 0,
-      review: { vendor:"", price:"", type:"Google Sites page", bestFor:"" },
+      review: { vendor:"", price:"", type:"", bestFor:"" },
       affiliateUrl: "",
       affiliateLabel: "Visit Page",
-      disclosure: "Some links may be affiliate links.",
+      disclosure: "",
       pros: [],
       cons: [],
       content: ""

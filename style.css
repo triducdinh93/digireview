@@ -374,3 +374,73 @@ html[data-theme="dark"] .primary-nav { background: rgba(13,23,18,.92); }
 .import-error a { color: var(--primary); font-weight: 800; }
 .article-content figure { margin: 26px 0; }
 .article-content figure img { width: 100%; height: auto; }
+
+.comment-system { display: grid; gap: 20px; }
+.comment-system-status { color: var(--muted); font-size: 13px; }
+.comment-list { display: grid; gap: 14px; }
+.comment-item {
+  display: grid;
+  grid-template-columns: 46px minmax(0,1fr);
+  gap: 13px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.comment-avatar {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  font-weight: 900;
+}
+.comment-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.comment-head time { color: var(--muted); font-size: 12px; }
+.comment-item p { margin: 6px 0 0; white-space: pre-wrap; }
+.comment-empty {
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  color: var(--muted);
+  background: var(--surface);
+}
+.comment-form {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.comment-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.comment-form label { display: grid; gap: 7px; font-size: 13px; font-weight: 800; }
+.comment-form input,
+.comment-form textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 11px 12px;
+}
+.comment-honeypot { position: absolute !important; left: -9999px !important; }
+.turnstile-slot { min-height: 65px; }
+.comment-form-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.comment-form-actions button {
+  border: 0;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 850;
+  padding: 11px 16px;
+}
+.comment-form-actions button:disabled { opacity: .6; cursor: wait; }
+.comment-privacy { color: var(--muted); font-size: 12px; }
+.comment-form-message { color: var(--primary-dark); font-weight: 700; font-size: 13px; }
+@media (max-width: 620px) {
+  .comment-form-grid { grid-template-columns: 1fr; }
+  .comment-head { align-items: flex-start; flex-direction: column; gap: 2px; }
+}

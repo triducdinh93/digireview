@@ -8,6 +8,12 @@
   const app = document.getElementById("app");
   const searchDialog = document.getElementById("search-dialog");
   const toast = document.getElementById("toast");
+  const services = window.DIGIREVIEW_SERVICES || {};
+  const NESI_AUTHOR = {
+    name: "Nesi",
+    avatar: "nesi-avatar.jpg",
+    bio: "I thoughtfully review digital products so you can understand what they offer, where their limits are, and whether they fit a real workflow. I aim to share clear, calm, and practical guidance, while encouraging every reader to verify current pricing and terms before making a decision."
+  };
   let currentPage = 1;
 
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, char => ({
@@ -50,9 +56,20 @@
   const sortedPosts = () => posts.slice().sort((a, b) => postTimestamp(b) - postTimestamp(a) || Number(b.id || 0) - Number(a.id || 0));
   const getPost = (slug) => posts.find(post => post.slug === slug);
 
-  // Every article opens inside DigiReview. A Google Sites URL is retained as
-  // the original content source and as analytics metadata.
-  const hasInternalArticle = (post) => Boolean(String(post.content || "").trim());
+  // Every article opens inside DigiReview. A tiny or link-only content block is
+  // not treated as a real article; in that case the Google Sites source is read.
+  const articleText = (html) => String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&amp;|&#39;|&quot;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const hasInternalArticle = (post) => {
+    const text = articleText(post.content);
+    return text.length >= 280 && text.split(/\s+/).length >= 45;
+  };
 
   const postHref = (post) => `#post=${encodeURIComponent(post.slug)}`;
 
@@ -127,7 +144,7 @@
       image: [post.image],
       datePublished: post.date,
       dateModified: post.updated || post.date,
-      author: { "@type": "Person", name: post.author || site.author?.name || "Editorial Team" },
+      author: { "@type": "Person", name: NESI_AUTHOR.name },
       publisher: { "@type": "Organization", name: site.name || "DigiReview" },
       mainEntityOfPage: location.href
     } : {
@@ -371,11 +388,172 @@
     return current;
   };
 
-  const commentsMarkup = (post) => {
-    if (site.comments?.provider !== "giscus" || !site.comments.repo || !site.comments.repoId) {
-      return `<div class="comments-placeholder"><strong>Comments are ready to connect.</strong><p>Open <code>posts.js</code> and add your Giscus repository values to enable a real comment system.</p></div>`;
+  const commentsMarkup = (post) => `
+    <div class="comment-system" data-comment-post="${escapeHtml(post.slug)}">
+      <div class="comment-system-status" id="comment-system-status">Loading comments…</div>
+      <div class="comment-list" id="comment-list"></div>
+      <form class="comment-form" id="comment-form" novalidate>
+        <div class="comment-form-grid">
+          <label>Your name
+            <input name="name" type="text" maxlength="60" autocomplete="name" required>
+          </label>
+          <label>Your email
+            <input name="email" type="email" maxlength="160" autocomplete="email" required>
+          </label>
+        </div>
+        <label>Your comment
+          <textarea name="comment" rows="5" maxlength="1500" required placeholder="Share a helpful and respectful comment."></textarea>
+        </label>
+        <label class="comment-honeypot" aria-hidden="true">Website
+          <input name="website" type="text" tabindex="-1" autocomplete="off">
+        </label>
+        <div class="turnstile-slot" id="comment-turnstile"></div>
+        <div class="comment-form-actions">
+          <button type="submit">Post comment</button>
+          <span class="comment-privacy">Your email is used for moderation and is never displayed.</span>
+        </div>
+        <div class="comment-form-message" id="comment-form-message" role="status"></div>
+      </form>
+    </div>`;
+
+  const renderCommentItems = (comments) => {
+    const target = document.getElementById("comment-list");
+    if (!target) return;
+    target.innerHTML = comments.length
+      ? comments.map(comment => `
+          <article class="comment-item">
+            <div class="comment-avatar">${escapeHtml(String(comment.name || "G").slice(0, 1).toUpperCase())}</div>
+            <div>
+              <div class="comment-head"><strong>${escapeHtml(comment.name || "Guest")}</strong><time>${formatDate(String(comment.created_at || "").slice(0, 10))}</time></div>
+              <p>${escapeHtml(comment.content || "")}</p>
+            </div>
+          </article>`).join("")
+      : `<div class="comment-empty">No comments yet. Be the first to share a helpful thought.</div>`;
+  };
+
+  const waitForTurnstile = () => new Promise((resolve, reject) => {
+    if (window.turnstile) return resolve(window.turnstile);
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      if (window.turnstile) {
+        window.clearInterval(timer);
+        resolve(window.turnstile);
+      } else if (Date.now() - started > 12000) {
+        window.clearInterval(timer);
+        reject(new Error("CAPTCHA could not be loaded."));
+      }
+    }, 150);
+  });
+
+  const initComments = async (post) => {
+    const config = services.comments || {};
+    const status = document.getElementById("comment-system-status");
+    const form = document.getElementById("comment-form");
+    const message = document.getElementById("comment-form-message");
+    if (!status || !form) return;
+
+    if (!config.endpoint || !config.turnstileSiteKey) {
+      status.innerHTML = `Guest comments are prepared but not connected yet. Complete the Supabase and Cloudflare Turnstile setup in <code>README-COMMENTS-VI.md</code>.`;
+      form.hidden = true;
+      renderCommentItems([]);
+      return;
     }
-    return `<div id="giscus-container" data-post-slug="${escapeHtml(post.slug)}"></div>`;
+
+    let captchaToken = "";
+    let widgetId = null;
+
+    const loadComments = async () => {
+      status.textContent = "Loading comments…";
+      try {
+        const separator = config.endpoint.includes("?") ? "&" : "?";
+        const response = await fetch(`${config.endpoint}${separator}post_slug=${encodeURIComponent(post.slug)}`, {
+          method: "GET",
+          headers: { "Accept": "application/json" },
+          cache: "no-store"
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        renderCommentItems(Array.isArray(payload.comments) ? payload.comments : []);
+        status.textContent = `${payload.comments?.length || 0} approved comment${payload.comments?.length === 1 ? "" : "s"}.`;
+      } catch (error) {
+        status.textContent = "Comments could not be loaded: " + error.message;
+        renderCommentItems([]);
+      }
+    };
+
+    try {
+      const turnstile = await waitForTurnstile();
+      widgetId = turnstile.render("#comment-turnstile", {
+        sitekey: config.turnstileSiteKey,
+        theme: document.documentElement.dataset.theme === "dark" ? "dark" : "light",
+        callback: token => { captchaToken = token; },
+        "expired-callback": () => { captchaToken = ""; },
+        "error-callback": () => { captchaToken = ""; }
+      });
+    } catch (error) {
+      status.textContent = error.message;
+    }
+
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      message.textContent = "";
+
+      const formData = new FormData(form);
+      const name = String(formData.get("name") || "").trim();
+      const email = String(formData.get("email") || "").trim();
+      const content = String(formData.get("comment") || "").trim();
+      const website = String(formData.get("website") || "").trim();
+
+      if (!name || !email || content.length < 10) {
+        message.textContent = "Please enter your name, a valid email, and a comment of at least 10 characters.";
+        return;
+      }
+      if (/https?:\/\/|www\.|\b[a-z0-9-]+\.(?:com|net|org|io|co|vn)\b/i.test(content)) {
+        message.textContent = "Links are not permitted in comments.";
+        return;
+      }
+      if (!captchaToken) {
+        message.textContent = "Please complete the CAPTCHA verification.";
+        return;
+      }
+
+      const submitButton = form.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
+      submitButton.textContent = "Posting…";
+
+      try {
+        const response = await fetch(config.endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify({
+            post_slug: post.slug,
+            name,
+            email,
+            content,
+            website,
+            turnstile_token: captchaToken
+          })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+
+        form.reset();
+        message.textContent = payload.message || "Your comment has been posted.";
+        captchaToken = "";
+        if (widgetId !== null && window.turnstile) window.turnstile.reset(widgetId);
+        await loadComments();
+        trackEvent("comment_submit", { article_slug: post.slug, moderation_status: payload.status || "approved" });
+      } catch (error) {
+        message.textContent = error.message;
+        if (widgetId !== null && window.turnstile) window.turnstile.reset(widgetId);
+        captchaToken = "";
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = "Post comment";
+      }
+    });
+
+    await loadComments();
   };
 
   const inlineImportedMarkdown = (value) => {
@@ -512,30 +690,70 @@
     return html.join("\n");
   };
 
+  const fetchGoogleSitesMarkdown = async (url) => {
+    const extractorEndpoint = String(services.extractorEndpoint || "").trim();
+
+    if (extractorEndpoint) {
+      try {
+        const response = await fetch(extractorEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Accept": "application/json" },
+          body: JSON.stringify({ url })
+        });
+        if (response.ok) {
+          const payload = await response.json();
+          if (String(payload.markdown || "").trim().length > 300) return payload.markdown;
+        }
+      } catch (error) {
+        console.warn("Configured extractor failed; using public Reader fallback.", error);
+      }
+    }
+
+    const hostPath = url.replace(/^https?:\/\//i, "");
+    const candidates = [
+      `https://r.jina.ai/${url}`,
+      `https://r.jina.ai/http://${hostPath}`,
+      `https://s.jina.ai/?q=${encodeURIComponent(url)}`
+    ];
+
+    let best = "";
+    for (const candidate of candidates) {
+      try {
+        const response = await fetch(candidate, {
+          method: "GET",
+          headers: { "Accept": "text/plain" },
+          cache: "no-store"
+        });
+        if (!response.ok) continue;
+        const text = await response.text();
+        if (text.length > best.length) best = text;
+        if (articleText(text).split(/\\s+/).length > 180) break;
+      } catch (error) {
+        console.warn("Reader candidate failed:", candidate, error);
+      }
+    }
+
+    if (articleText(best).split(/\\s+/).length < 45) {
+      throw new Error("The public page could not be extracted. Configure the included Supabase extractor for reliable importing.");
+    }
+    return best;
+  };
+
   const loadGoogleSitesArticle = async (post) => {
     if (!post.externalUrl || hasInternalArticle(post)) return post.content || "";
 
     const cacheKey = `digireview-live-google-site-${post.slug}-${post.externalUrl}`;
     const cached = sessionStorage.getItem(cacheKey);
-    if (cached) {
+    if (cached && articleText(cached).split(/\\s+/).length >= 45) {
       post.content = cached;
       return cached;
     }
 
-    const response = await fetch(`https://r.jina.ai/${post.externalUrl}`, {
-      cache: "no-store",
-      headers: {
-        "Accept": "text/plain",
-        "X-No-Cache": "true",
-        "X-Cache-Tolerance": "0",
-        "X-With-Images-Summary": "true"
-      }
-    });
-
-    if (!response.ok) throw new Error(`Google Sites reader returned HTTP ${response.status}`);
-    const markdown = await response.text();
+    const markdown = await fetchGoogleSitesMarkdown(post.externalUrl);
     const html = importedMarkdownToHtml(markdown, post.title, post.image);
-    if (!html.trim()) throw new Error("No readable article content was returned.");
+    if (articleText(html).split(/\\s+/).length < 45) {
+      throw new Error("The page was reached, but no complete article content was returned.");
+    }
 
     post.content = html;
     sessionStorage.setItem(cacheKey, html);
@@ -556,6 +774,34 @@
         </div>
       </section>`;
     scrollTop();
+  };
+
+  const sanitizeArticleHtml = (post) => {
+    const holder = document.createElement("div");
+    holder.innerHTML = String(post.content || "");
+
+    [...holder.querySelectorAll("p, div")].forEach(element => {
+      const text = element.textContent.replace(/\\s+/g, " ").trim();
+      const links = [...element.querySelectorAll(":scope > a")];
+      const onlyDirectLink = links.length === 1 &&
+        [...element.children].every(child => child.tagName === "A");
+
+      if (onlyDirectLink) {
+        const href = links[0].href || "";
+        const label = links[0].textContent.replace(/\\s+/g, " ").trim();
+        if (href === post.externalUrl ||
+            label.toLowerCase() === String(post.title || "").toLowerCase()) {
+          element.remove();
+          return;
+        }
+      }
+
+      if (/^disclosure\\s*:/i.test(text) || /^review snapshot$/i.test(text)) {
+        element.remove();
+      }
+    });
+
+    return holder.innerHTML;
   };
 
   const renderPost = async (post) => {
@@ -579,6 +825,7 @@
     updateJsonLd(post);
     const views = incrementView(post.slug);
     const related = relatedPosts(post);
+    const cleanedArticleContent = sanitizeArticleHtml(post);
     app.innerHTML = `
       <article class="article-shell">
         <div class="container">
@@ -589,20 +836,18 @@
                 <span class="category-pill">${escapeHtml(post.categories?.[0] || "Review")}</span>
                 <h1>${escapeHtml(post.title)}</h1>
                 <p class="article-deck">${escapeHtml(post.excerpt)}</p>
-                <div class="post-meta"><span>By ${escapeHtml(post.author || site.author?.name || "Editorial Team")}</span><span>${formatDate(post.date)}</span><span>${postReadLabel(post)}</span><span>${views} local views</span></div>
+                <div class="post-meta"><span>By ${escapeHtml(NESI_AUTHOR.name)}</span><span>${formatDate(post.date)}</span><span>${postReadLabel(post)}</span><span>${views} local views</span></div>
               </header>
               <img class="article-hero" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'">
-              <div class="disclosure"><strong>Disclosure:</strong> ${escapeHtml(post.disclosure || "This article may contain affiliate links.")}</div>
               ${renderOriginalSource(post)}
               <div id="toc-container"></div>
-              ${renderReviewBox(post)}
               ${renderCta(post)}
-              <div class="article-content" id="article-content">${post.content || ""}</div>
+              <div class="article-content" id="article-content">${cleanedArticleContent}</div>
               ${renderProsCons(post)}
               ${renderCta(post)}
               <div class="tag-row">${(post.tags || []).map(tag => `<a href="#search=${encodeURIComponent(tag)}">#${escapeHtml(tag)}</a>`).join("")}</div>
               <section class="rating-box"><strong>Was this article helpful?</strong><div class="rating-stars" data-rating-slug="${escapeHtml(post.slug)}">${[1,2,3,4,5].map(star => `<button type="button" data-rating="${star}" aria-label="Rate ${star} out of 5">★</button>`).join("")}</div><small id="rating-message">Your rating is stored in this browser.</small></section>
-              <section class="author-box"><img class="author-avatar" src="${escapeHtml(site.author?.avatar || post.image)}" alt="${escapeHtml(site.author?.name || post.author || "Author")}"><div><h2>About ${escapeHtml(site.author?.name || post.author || "the author")}</h2><p>${escapeHtml(site.author?.bio || "Editorial author profile.")}</p></div></section>
+              <section class="author-box"><img class="author-avatar" src="${escapeHtml(NESI_AUTHOR.avatar)}" alt="${escapeHtml(NESI_AUTHOR.name)}"><div><h2>About ${escapeHtml(NESI_AUTHOR.name)}</h2><p>${escapeHtml(NESI_AUTHOR.bio)}</p></div></section>
               <section class="comments-box"><h2>Comments</h2>${commentsMarkup(post)}</section>
               ${related.length ? `<section class="section"><div class="section-heading"><div><h2>Related posts</h2></div></div><div class="related-grid">${related.map(item => `<a class="related-card" href="${postHref(item)}"${postTargetAttrs(item)}><img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'"><div><span class="category-pill">${escapeHtml(item.categories?.[0] || "Article")}</span><strong>${escapeHtml(item.title)}</strong></div></a>`).join("")}</div></section>` : ""}
             </div>
@@ -617,7 +862,7 @@
     buildToc();
     bindDynamicEvents();
     bindRating(post.slug);
-    loadGiscus();
+    initComments(post);
     scrollTop();
 
     if (post.externalUrl) {
@@ -643,28 +888,6 @@
     if (container) container.innerHTML = markup;
     const sticky = document.getElementById("sticky-toc");
     if (sticky) sticky.innerHTML = headings.length ? `<div class="category-list">${headings.filter(h => h.tagName === "H2").map(h => `<a href="#${escapeHtml(h.id)}"><span>${escapeHtml(h.textContent)}</span></a>`).join("")}</div>` : "<p>No sections found.</p>";
-  };
-
-  const loadGiscus = () => {
-    const container = document.getElementById("giscus-container");
-    if (!container || site.comments?.provider !== "giscus") return;
-    const script = document.createElement("script");
-    script.src = "https://giscus.app/client.js";
-    script.setAttribute("data-repo", site.comments.repo);
-    script.setAttribute("data-repo-id", site.comments.repoId);
-    script.setAttribute("data-category", site.comments.category || "General");
-    script.setAttribute("data-category-id", site.comments.categoryId || "");
-    script.setAttribute("data-mapping", "specific");
-    script.setAttribute("data-term", container.dataset.postSlug);
-    script.setAttribute("data-strict", "0");
-    script.setAttribute("data-reactions-enabled", "1");
-    script.setAttribute("data-emit-metadata", "0");
-    script.setAttribute("data-input-position", "top");
-    script.setAttribute("data-theme", document.documentElement.dataset.theme === "dark" ? "dark" : "light");
-    script.setAttribute("data-lang", "en");
-    script.crossOrigin = "anonymous";
-    script.async = true;
-    container.appendChild(script);
   };
 
   const bindRating = (slug) => {
