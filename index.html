@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Independent digital product reviews, comparisons and practical buying guides." />
+  <meta name="theme-color" content="#ffffff" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="DigiReview Journal" />
+  <meta property="og:description" content="Independent digital product reviews, comparisons and practical buying guides." />
+  <title>DigiReview Journal</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/style.css" />
+  <script defer src="data/posts.js"></script>
+  <script defer src="assets/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="reading-progress" aria-hidden="true"></div>
+
+  <header class="site-header" id="site-header">
+    <div class="topbar">
+      <div class="container topbar-inner">
+        <span id="topbar-text">Independent reviews. Clear buying decisions.</span>
+        <div class="topbar-actions">
+          <button class="icon-btn" id="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <span class="theme-icon">◐</span>
+          </button>
+          <button class="text-btn" id="open-search" type="button">Search</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="container brand-row">
+      <a class="brand" href="#home" aria-label="DigiReview Journal home">
+        <span class="brand-mark">DR</span>
+        <span>
+          <strong id="brand-name">DigiReview</strong>
+          <small id="brand-tagline">Reviews & Buying Guides</small>
+        </span>
+      </a>
+      <a class="header-cta" id="header-cta" href="#category=AI%20Tools">Top Recommendations</a>
+      <button class="menu-toggle" id="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav">Menu</button>
+    </div>
+
+    <nav class="primary-nav" id="primary-nav" aria-label="Primary navigation">
+      <div class="container nav-inner">
+        <a href="#home">Home</a>
+        <div class="nav-dropdown">
+          <button type="button" aria-expanded="false">Tips & Guides <span>▾</span></button>
+          <div class="dropdown-menu">
+            <a href="#category=How%20To">How To</a>
+            <a href="#category=Affiliate%20Marketing">Affiliate Marketing</a>
+            <a href="#category=Digital%20Marketing">Digital Marketing</a>
+            <a href="#category=SEO">SEO</a>
+          </div>
+        </div>
+        <div class="nav-dropdown mega">
+          <button type="button" aria-expanded="false">Product Reviews <span>▾</span></button>
+          <div class="dropdown-menu mega-menu">
+            <a href="#category=AI%20Tools">AI Tools</a>
+            <a href="#category=Tools%20%26%20Software">Tools & Software</a>
+            <a href="#category=WordPress">WordPress</a>
+            <a href="#category=Video%20Marketing">Video Marketing</a>
+            <a href="#category=SEO%20%26%20Traffic">SEO & Traffic</a>
+            <a href="#category=PLR">PLR</a>
+          </div>
+        </div>
+        <a href="#category=Bonuses">Bonuses</a>
+        <a href="#page=about">About</a>
+        <a href="#page=contact">Contact</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content" tabindex="-1">
+    <div id="app" aria-live="polite"></div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-grid">
+      <section>
+        <a class="brand footer-brand" href="#home">
+          <span class="brand-mark">DR</span>
+          <span><strong>DigiReview</strong><small>Reviews & Buying Guides</small></span>
+        </a>
+        <p id="footer-about">Practical reviews and buying guides for digital products, software and online marketing tools.</p>
+      </section>
+      <section>
+        <h2>Explore</h2>
+        <a href="#category=AI%20Tools">AI Tools</a>
+        <a href="#category=Affiliate%20Marketing">Affiliate Marketing</a>
+        <a href="#category=PLR">PLR</a>
+        <a href="#category=SEO">SEO</a>
+      </section>
+      <section>
+        <h2>Company</h2>
+        <a href="#page=about">About Us</a>
+        <a href="#page=contact">Contact Us</a>
+        <a href="#page=privacy">Privacy Policy</a>
+        <a href="#page=terms">Terms & Conditions</a>
+        <a href="#page=disclaimer">Disclaimer</a>
+      </section>
+      <section>
+        <h2>Get new reviews</h2>
+        <p>Receive new reviews and practical guides in your inbox.</p>
+        <form class="newsletter-form" data-newsletter-form>
+          <label class="sr-only" for="footer-email">Email address</label>
+          <input id="footer-email" name="email" type="email" placeholder="Email address" required />
+          <button type="submit">Subscribe</button>
+        </form>
+      </section>
+    </div>
+    <div class="container footer-bottom">
+      <span>© <span id="current-year"></span> DigiReview Journal.</span>
+      <span>Some links may be affiliate links.</span>
+    </div>
+  </footer>
+
+  <dialog class="search-dialog" id="search-dialog">
+    <form method="dialog" class="search-dialog-head">
+      <strong>Search the blog</strong>
+      <button class="icon-btn" value="cancel" aria-label="Close search">×</button>
+    </form>
+    <form id="global-search-form" class="search-form">
+      <label for="global-search-input">Enter a product, topic or keyword</label>
+      <div class="search-input-row">
+        <input id="global-search-input" type="search" autocomplete="off" placeholder="Example: AI tools" />
+        <button type="submit">Search</button>
+      </div>
+    </form>
+    <div id="live-search-results" class="live-search-results"></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <button class="back-to-top" id="back-to-top" type="button" aria-label="Back to top">↑</button>
+
+  <div class="cookie-banner" id="cookie-banner" hidden>
+    <p>This demo uses local storage for theme, rating and view preferences. Add your own consent manager before production use.</p>
+    <button type="button" id="accept-cookies">Got it</button>
+  </div>
+</body>
+</html>
