@@ -1,133 +1,77 @@
 import { chromium } from "playwright";
 import fs from "node:fs/promises";
+import vm from "node:vm";
 
-const read = file => fs.readFile(file, "utf8");
-const [indexHtml, css, postsSource, normalizerSource, originalApp] = await Promise.all([
-  read("index.html"), read("style.css"), read("posts.js"), read("content-normalizer.js"), read("app.js")
-]);
+await import("./content-schema.js");
+const Schema = globalThis.DigiReviewContentSchema;
 
-const body = indexHtml.match(/<body>([\s\S]*)<\/body>/i)?.[1] || "<main id=\"app\"></main>";
-const appSource = originalApp
-  .replaceAll("localStorage", "__auditStorage")
-  .replaceAll("sessionStorage", "__auditSessionStorage");
-const dataMatch = postsSource.match(/window\.BLOG_DATA\s*=\s*([\s\S]*);\s*$/);
-if (!dataMatch) throw new Error("posts.js does not contain window.BLOG_DATA.");
-const data = JSON.parse(dataMatch[1]);
-const posts = Array.isArray(data.posts) ? data.posts : [];
+const postsSource = await fs.readFile("posts.js", "utf8");
+const sandbox = { window: {} };
+vm.createContext(sandbox);
+vm.runInContext(postsSource, sandbox);
+const posts = Array.isArray(sandbox.window.BLOG_DATA?.posts) ? sandbox.window.BLOG_DATA.posts : [];
+const css = await fs.readFile("style.css", "utf8");
 
-const baseHtml = `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${body}</body></html>`;
-const storageSource = `
-window.__auditStorage={_d:{},getItem(k){return this._d[k]??null},setItem(k,v){this._d[k]=String(v)},removeItem(k){delete this._d[k]}};
-window.__auditSessionStorage={_d:{},getItem(k){return this._d[k]??null},setItem(k,v){this._d[k]=String(v)},removeItem(k){delete this._d[k]}};
-`;
+const canonical = posts.filter(post => post.contentModel?.blocks);
+const legacy = posts.filter(post => !post.contentModel?.blocks);
+const structuralIssues = [];
 
+for (const post of canonical) {
+  const audit = Schema.audit(post.contentModel);
+  if (!audit.valid) structuralIssues.push(`${post.slug}: ${audit.issues.join("; ")}`);
+  const cta = Schema.normalizeCta(post.cta || post.contentModel?.cta);
+  if (cta.enabled && !cta.url) structuralIssues.push(`${post.slug}: enabled CTA lacks a valid URL.`);
+}
+
+const browser = await chromium.launch({ headless: true });
 const viewports = [
   { name: "desktop", width: 1440, height: 1000 },
   { name: "mobile", width: 390, height: 844 }
 ];
-const report = { generatedAt: new Date().toISOString(), posts: posts.length, checks: [], failures: [] };
-const browser = await chromium.launch({ headless: true });
+const renderIssues = [];
 
-try {
+for (const post of canonical) {
   for (const viewport of viewports) {
-    const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height } });
+    const context = await browser.newContext({ viewport });
     const page = await context.newPage();
-    await page.route("**/*", route => route.abort()).catch(() => {});
-
-    for (const post of posts) {
-      const errors = [];
-      const onError = error => errors.push(String(error));
-      page.on("pageerror", onError);
-      try {
-        await page.setContent(baseHtml, { waitUntil: "domcontentloaded" });
-        await page.evaluate(slug => { location.hash = `#post=${slug}`; }, post.slug);
-        await page.addScriptTag({ content: postsSource });
-        await page.addScriptTag({ content: storageSource });
-        await page.addScriptTag({ content: normalizerSource });
-        await page.addScriptTag({ content: appSource });
-        await page.waitForSelector("#article-content", { timeout: 15_000 });
-
-        const result = await page.evaluate(() => {
-          const content = document.getElementById("article-content");
-          const contentRect = content.getBoundingClientRect();
-          const visible = element => {
-            const rect = element.getBoundingClientRect();
-            const style = getComputedStyle(element);
-            return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
-          };
-
-          const overflow = [...content.querySelectorAll("*")]
-            .filter(visible)
-            .filter(element => !element.closest(".table-scroll,.code-scroll"))
-            .filter(element => {
-              const rect = element.getBoundingClientRect();
-              return rect.right > contentRect.right + 3 || rect.left < contentRect.left - 3 || rect.width > contentRect.width + 3;
-            }).length;
-
-          const legacyLayouts = [...content.querySelectorAll("*")].filter(element =>
-            [...element.classList].some(name => /^(?:pricing-grid|pricing-card|comparison-grid|comparison-card|numbered-card-grid|numbered-card|content-card-grid|content-card|promo-card|media-gallery)$/.test(name))
-          ).length;
-
-          const genericLabels = new Set([
-            "pricing", "faq", "my verdict", "verdict", "risk free", "risk-free", "the shift",
-            "cost comparison", "value breakdown", "what you download", "full library", "overview",
-            "summary", "bonuses", "bonus", "features", "evaluation", "audience fit", "what you get",
-            "ideal for", "product overview", "honest assessment", "watch before you buy"
-          ]);
-          const orphanGenericLabels = [...content.querySelectorAll("p,div,span")]
-            .filter(element => element.children.length === 0 && genericLabels.has(String(element.textContent || "").trim().toLowerCase()))
-            .length;
-
-          const ctas = [...content.querySelectorAll("a.imported-cta")];
-          const media = [...content.querySelectorAll("video,iframe,object,embed")];
-          const normalizerAudit = window.DigiReviewContentNormalizer?.audit(content) || { issues: ["Normalizer unavailable."] };
-
-          return {
-            pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 3,
-            overflow,
-            legacyLayouts,
-            orphanGenericLabels,
-            ctaCount: ctas.length,
-            ctaWithoutHref: ctas.filter(link => !/^https?:\/\//i.test(link.getAttribute("href") || "")).length,
-            unwrappedMedia: media.filter(item => !item.closest(".content-video-wrap")).length,
-            safeRoot: content.querySelectorAll(".dr-safe-flow-root").length,
-            normalizerIssues: normalizerAudit.issues || []
-          };
-        });
-
-        const failures = [];
-        if (errors.length) failures.push(`JavaScript errors: ${errors.join(" | ")}`);
-        if (result.pageOverflow || result.overflow) failures.push("Content overflow detected.");
-        if (result.legacyLayouts) failures.push("Legacy inferred card/grid layout remains.");
-        if (result.orphanGenericLabels) failures.push("Generic orphan labels remain.");
-        if (result.ctaCount > 2 || result.ctaWithoutHref) failures.push("CTA validation failed.");
-        if (result.unwrappedMedia) failures.push("Media wrapper validation failed.");
-        if (result.safeRoot !== 1) failures.push("Safe-flow root validation failed.");
-        if (result.normalizerIssues.length) failures.push(...result.normalizerIssues);
-
-        const record = { viewport: viewport.name, slug: post.slug, ...result, failures };
-        report.checks.push(record);
-        if (failures.length) report.failures.push(record);
-      } catch (error) {
-        const record = { viewport: viewport.name, slug: post.slug, failures: [String(error)] };
-        report.checks.push(record);
-        report.failures.push(record);
-      } finally {
-        page.off("pageerror", onError);
-      }
-    }
+    const content = Schema.renderBlocks(post.contentModel);
+    const cta = Schema.renderCta(post.cta || post.contentModel?.cta);
+    await page.setContent(`<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body><main style="width:min(1180px,calc(100% - 24px));margin:auto"><div class="article-layout"><article><div id="article-content" class="article-content">${content}</div>${cta}</article></div></main></body></html>`, { waitUntil: "domcontentloaded" });
+    const result = await page.evaluate(() => {
+      const root = document.querySelector("article");
+      const rootRect = root.getBoundingClientRect();
+      const overflow = [...root.querySelectorAll("*")].filter(element => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        if (style.display === "none" || rect.width === 0) return false;
+        if (element.closest(".dr-table-scroll")) return false;
+        return rect.left < rootRect.left - 3 || rect.right > rootRect.right + 3 || rect.width > rootRect.width + 3;
+      }).slice(0, 8).map(element => `${element.tagName}.${String(element.className || "")}`);
+      return {
+        viewportOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 3,
+        overflow,
+        ctaCount: document.querySelectorAll(".dr-standard-cta").length,
+        rawCtaLinks: document.querySelectorAll("#article-content a").length,
+        invalidMedia: [...document.querySelectorAll(".dr-video")].filter(figure => !figure.querySelector(".dr-video-frame video,.dr-video-frame iframe")).length,
+        schemaRoots: document.querySelectorAll('[data-dr-schema="dr-content-v1"]').length
+      };
+    });
+    if (result.viewportOverflow || result.overflow.length) renderIssues.push(`${post.slug} (${viewport.name}): overflow ${result.overflow.join(", ")}`);
+    if (result.ctaCount > 1) renderIssues.push(`${post.slug} (${viewport.name}): more than one standard CTA.`);
+    if (result.rawCtaLinks) renderIssues.push(`${post.slug} (${viewport.name}): article body contains hyperlinks; CTA links must live in the standard CTA form.`);
+    if (result.invalidMedia) renderIssues.push(`${post.slug} (${viewport.name}): invalid video block.`);
+    if (result.schemaRoots !== 1) renderIssues.push(`${post.slug} (${viewport.name}): expected one canonical schema root.`);
     await context.close();
   }
-} finally {
-  await browser.close();
 }
+await browser.close();
 
-await fs.writeFile("layout-audit-report.json", JSON.stringify(report, null, 2) + "\n");
-console.log(`Audited ${report.checks.length} desktop/mobile article renders in safe-flow mode.`);
-if (report.failures.length) {
-  console.error(`Layout audit failed for ${report.failures.length} render(s).`);
-  report.failures.slice(0, 20).forEach(item => console.error(`${item.viewport} · ${item.slug}: ${item.failures.join("; ")}`));
-  process.exitCode = 1;
-} else {
-  console.log("Safe-flow layout audit passed with no detected regressions.");
-}
+console.log(JSON.stringify({
+  posts: posts.length,
+  canonical: canonical.length,
+  legacy: legacy.length,
+  structuralIssues,
+  renderIssues
+}, null, 2));
+
+if (structuralIssues.length || renderIssues.length) process.exitCode = 1;

@@ -1809,3 +1809,274 @@ html, body {
   .article-content .safe-media-caption { padding: 11px 13px 13px; font-size: 13px; }
   .article-content a.imported-cta { width: 100% !important; }
 }
+
+/* DigiReview V23: schema-first article renderer */
+.dr-canonical-content {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+.dr-canonical-content > * {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.dr-canonical-content .dr-heading {
+  margin: 42px 0 18px;
+  color: var(--text);
+  line-height: 1.22;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.dr-canonical-content .dr-heading-2 {
+  font-size: clamp(28px, 3.4vw, 40px);
+}
+.dr-canonical-content .dr-heading-3 {
+  font-size: clamp(22px, 2.6vw, 30px);
+}
+.dr-canonical-content .dr-heading::after {
+  content: "";
+  display: block;
+  width: 54px;
+  height: 3px;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: var(--primary);
+}
+.dr-canonical-content .dr-paragraph {
+  margin: 0 0 20px;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.78;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.dr-list-section {
+  margin: 24px 0 30px;
+}
+.dr-list-title {
+  margin: 0 0 12px;
+  font-size: 24px;
+  line-height: 1.35;
+}
+.dr-list-section ul,
+.dr-list-section ol {
+  margin: 0;
+  padding-left: 28px;
+}
+.dr-list-section li {
+  margin: 0 0 12px;
+  padding-left: 5px;
+  font-size: 18px;
+  line-height: 1.65;
+}
+.dr-list-check ul,
+.dr-list-cross ul {
+  list-style: none;
+  padding-left: 0;
+}
+.dr-list-check li,
+.dr-list-cross li {
+  position: relative;
+  padding-left: 34px;
+}
+.dr-list-check li::before,
+.dr-list-cross li::before {
+  position: absolute;
+  left: 0;
+  top: .05em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 900;
+}
+.dr-list-check li::before {
+  content: "✓";
+  color: var(--primary-dark);
+  background: #e3f6eb;
+}
+.dr-list-cross li::before {
+  content: "×";
+  color: #a7354d;
+  background: #fdecef;
+}
+.dr-media {
+  display: block;
+  width: 100%;
+  margin: 30px 0 34px;
+}
+.dr-media img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 16px;
+  background: #eef6f1;
+}
+.dr-image-standard img { max-width: 760px; }
+.dr-image-portrait img { max-width: 620px; max-height: 820px; object-fit: contain; }
+.dr-media figcaption,
+.dr-table-block > figcaption {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+  text-align: center;
+}
+.dr-video-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #08120d;
+}
+.dr-video-frame iframe,
+.dr-video-frame video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: contain;
+  background: #08120d;
+}
+.dr-audio audio { width: 100%; }
+.dr-table-block {
+  margin: 30px 0 34px;
+}
+.dr-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.dr-table-scroll table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+.dr-table-scroll th,
+.dr-table-scroll td {
+  padding: 14px 16px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.5;
+}
+.dr-table-scroll th {
+  background: var(--soft);
+  font-weight: 850;
+}
+.dr-quote {
+  margin: 30px 0;
+  padding: 22px 24px;
+  border-left: 4px solid var(--primary);
+  border-radius: 0 14px 14px 0;
+  background: var(--soft);
+}
+.dr-quote p { margin: 0; font-size: 20px; line-height: 1.65; }
+.dr-quote cite { display: block; margin-top: 12px; color: var(--muted); }
+.dr-callout {
+  margin: 28px 0;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--primary);
+  border-radius: 14px;
+  background: var(--soft);
+}
+.dr-callout h3 { margin: 0 0 8px; }
+.dr-callout p { margin: 0; line-height: 1.65; }
+.dr-callout-warning { border-left-color: #d9901a; background: #fff8e8; }
+.dr-callout-success { border-left-color: var(--primary); background: #eefaf3; }
+.dr-callout-neutral { border-left-color: #718079; background: #f3f6f4; }
+.dr-faq { margin: 40px 0; }
+.dr-faq > h2 { margin-bottom: 18px; }
+.dr-faq details {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.dr-faq summary {
+  padding: 16px 18px;
+  cursor: pointer;
+  font-weight: 800;
+}
+.dr-faq details p {
+  margin: 0;
+  padding: 0 18px 18px;
+  line-height: 1.65;
+}
+.dr-divider {
+  margin: 36px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.dr-standard-cta {
+  margin: 42px 0;
+  padding: clamp(24px, 4vw, 38px);
+  border: 1px solid #a8dbc0;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #effbf4 0%, #e3f6eb 100%);
+  text-align: left;
+}
+.dr-standard-cta .dr-cta-eyebrow {
+  display: inline-flex;
+  margin-bottom: 13px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #d3f0df;
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.dr-standard-cta h2 {
+  margin: 0 0 12px;
+  font-size: clamp(28px, 3.4vw, 40px);
+  line-height: 1.18;
+}
+.dr-standard-cta p {
+  max-width: 760px;
+  margin: 0 0 20px;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.65;
+}
+.dr-standard-cta > a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 13px 20px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  font-weight: 900;
+  text-decoration: none;
+  box-shadow: 0 12px 24px rgba(31,157,104,.2);
+}
+.dr-standard-cta small {
+  display: block;
+  margin-top: 12px;
+  color: var(--muted);
+}
+@media (max-width: 640px) {
+  .dr-canonical-content .dr-paragraph,
+  .dr-list-section li { font-size: 16px; }
+  .dr-canonical-content .dr-heading { margin-top: 34px; }
+  .dr-media { margin: 24px 0 28px; }
+  .dr-image-portrait img { max-height: 640px; }
+  .dr-standard-cta { padding: 22px 18px; }
+  .dr-standard-cta > a { width: 100%; }
+}

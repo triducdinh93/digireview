@@ -9,6 +9,7 @@
   const searchDialog = document.getElementById("search-dialog");
   const toast = document.getElementById("toast");
   const services = window.DIGIREVIEW_SERVICES || {};
+  const ContentSchema = window.DigiReviewContentSchema || null;
   const NESI_AUTHOR = {
     name: site.author?.name || "Nesi",
     avatar: site.author?.avatar || "nesi-avatar.jpg",
@@ -42,9 +43,14 @@
     }
   };
 
+  const postPlainText = (post) => {
+    if (post?.contentModel && ContentSchema) return ContentSchema.toPlainText(post.contentModel);
+    return String(post?.content || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  };
+
   const readTime = (post) => {
-    const text = String(post.content || "").replace(/<[^>]*>/g, " ").trim();
-    const words = text ? text.split(/\s+/).length : 0;
+    const value = postPlainText(post);
+    const words = value ? value.split(/\s+/).length : 0;
     return Math.max(1, Math.ceil(words / 220));
   };
 
@@ -87,8 +93,12 @@
     .trim();
 
   const hasInternalArticle = (post) => {
-    const text = articleText(post.content);
-    return text.length >= 280 && text.split(/\s+/).length >= 45;
+    if (post?.contentModel && ContentSchema) {
+      const audit = ContentSchema.audit(post.contentModel);
+      return audit.stats.words >= 45 && audit.stats.blocks >= 3;
+    }
+    const value = articleText(post?.content);
+    return value.length >= 280 && value.split(/\s+/).length >= 45;
   };
 
   const postHref = (post) => `#post=${encodeURIComponent(post.slug)}`;
@@ -366,7 +376,7 @@
       title: "Search Results",
       description: "Search across titles, summaries, categories, tags and article content.",
       query,
-      filter: post => [post.title, post.excerpt, ...(post.categories || []), ...(post.tags || []), String(post.content || "").replace(/<[^>]*>/g, " ")].join(" ").toLowerCase().includes(q)
+      filter: post => [post.title, post.excerpt, ...(post.categories || []), ...(post.tags || []), postPlainText(post)].join(" ").toLowerCase().includes(q)
     });
   };
 
@@ -392,12 +402,26 @@
       <a href="${escapeHtml(post.externalUrl)}" target="_blank" rel="noopener" data-google-site-source="true" data-post-slug="${escapeHtml(post.slug)}" data-article-title="${escapeHtml(post.title)}">View original page ↗</a>
     </div>` : "";
 
-  const renderCta = (post) => post.affiliateUrl ? `<section class="cta-box">
-    <h2>Check the current product offer</h2>
-    <p>Review the live price, included features, refund conditions and optional upgrades before completing your purchase.</p>
-    <a class="cta-button" href="${escapeHtml(post.affiliateUrl)}" target="_blank" rel="sponsored nofollow noopener">${escapeHtml(post.affiliateLabel || "Check Current Offer")}</a>
-    <small class="cta-note">Pricing and product terms may change.</small>
-  </section>` : "";
+  const standardCtaFor = (post) => {
+    if ((post?.cta || post?.contentModel?.cta) && ContentSchema) return ContentSchema.normalizeCta(post.cta || post.contentModel.cta);
+    if (post?.affiliateUrl && ContentSchema) return ContentSchema.normalizeCta({
+      enabled: true,
+      eyebrow: "Current Offer",
+      title: "Check the current product offer",
+      description: "Review the live price, included features and refund terms before purchasing.",
+      buttonLabel: post.affiliateLabel || "View Current Offer",
+      url: post.affiliateUrl,
+      note: "Pricing and terms may change.",
+      placement: "after-content"
+    });
+    return ContentSchema ? ContentSchema.normalizeCta({ enabled: false }) : { enabled: false };
+  };
+
+  const renderCta = (post) => {
+    const cta = standardCtaFor(post);
+    if (!cta.enabled) return "";
+    return ContentSchema ? ContentSchema.renderCta(cta) : "";
+  };
 
   const renderProsCons = (post) => {
     const pros = post.pros || [];
@@ -1417,9 +1441,14 @@
     updateJsonLd(post);
     const views = incrementView(post.slug);
     const related = relatedPosts(post);
-    const cleanedArticleContent = sanitizeArticleHtml(post);
-    const inlineCtaCount = (cleanedArticleContent.match(/class=["'][^"']*\bimported-cta\b/gi) || []).length;
-    const metadataCta = inlineCtaCount ? "" : renderCta(post);
+    const hasCanonicalModel = Boolean(post.contentModel && ContentSchema);
+    const cleanedArticleContent = hasCanonicalModel
+      ? ContentSchema.renderBlocks(post.contentModel)
+      : sanitizeArticleHtml(post);
+    const standardCta = standardCtaFor(post);
+    const ctaMarkup = standardCta.enabled ? renderCta(post) : "";
+    const ctaAfterIntro = standardCta.placement === "after-intro" ? ctaMarkup : "";
+    const ctaAfterContent = standardCta.placement !== "after-intro" ? ctaMarkup : "";
     app.innerHTML = `
       <article class="article-shell">
         <div class="container">
@@ -1435,9 +1464,10 @@
               <div id="toc-container"></div>
               <img class="article-hero" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'">
               ${renderOriginalSource(post)}
+              ${ctaAfterIntro}
               <div class="article-content" id="article-content">${cleanedArticleContent}</div>
               ${renderProsCons(post)}
-              ${metadataCta}
+              ${ctaAfterContent}
               <div class="tag-row">${(post.tags || []).map(tag => `<a href="#search=${encodeURIComponent(tag)}">#${escapeHtml(tag)}</a>`).join("")}</div>
               <section class="rating-box"><strong>Was this article helpful?</strong><div class="rating-stars" data-rating-slug="${escapeHtml(post.slug)}">${[1,2,3,4,5].map(star => `<button type="button" data-rating="${star}" aria-label="Rate ${star} out of 5">★</button>`).join("")}</div><small id="rating-message">Your rating is stored in this browser.</small></section>
               <section class="author-box"><img class="author-avatar" src="${escapeHtml(NESI_AUTHOR.avatar)}" alt="${escapeHtml(NESI_AUTHOR.name)}"><div><h2>About ${escapeHtml(NESI_AUTHOR.name)}</h2><p>${escapeHtml(NESI_AUTHOR.bio)}</p></div></section>
@@ -1452,14 +1482,14 @@
         </div>
       </article>`;
     const renderedArticleContent = document.getElementById("article-content");
-    if (renderedArticleContent && window.DigiReviewContentNormalizer) {
+    if (!hasCanonicalModel && renderedArticleContent && window.DigiReviewContentNormalizer) {
       const normalization = window.DigiReviewContentNormalizer.normalize(renderedArticleContent, {
         affiliateUrl: post?.affiliateUrl || "",
         force: true
       });
-      if (normalization.issues?.length) console.warn("Safe-flow normalization warnings:", normalization.issues);
+      if (normalization.issues?.length) console.warn("Legacy article normalization warnings:", normalization.issues);
     }
-    prepareArticleMedia();
+    if (!hasCanonicalModel) prepareArticleMedia();
     buildToc();
     bindDynamicEvents();
     bindRating(post.slug);
