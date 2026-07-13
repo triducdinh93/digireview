@@ -17,9 +17,9 @@ window.BLOG_DATA = {
       "categoryId": ""
     },
     "author": {
-      "name": "Editorial Team",
-      "bio": "We review digital products using product documentation, public sales materials and practical evaluation criteria. Pricing and availability can change, so readers should verify final terms before buying.",
-      "avatar": "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=220&q=80"
+      "name": "Nesi",
+      "avatar": "https://i.postimg.cc/3JBdGTqL/model-sculpt-17649206507662.png",
+      "bio": "I thoughtfully review digital products so you can understand what they offer, where their limits are, and whether they fit a real workflow. I aim to share clear, calm, and practical guidance, while encouraging every reader to verify current pricing and terms before making a decision."
     },
     "categoryGroups": {
       "Tips & Guides": [
@@ -41,12 +41,13 @@ window.BLOG_DATA = {
         "Templates & Resources",
         "Affiliate Bonuses"
       ]
-    }
+    },
+    "contactEmail": "dinhtrantriduc@gmail.com"
   },
   "pages": {
     "about": {
-      "title": "About Us",
-      "content": "<p>DigiReview Journal publishes independent reviews, comparisons and practical guides for digital tools, software and online marketing products.</p><h2>How we review products</h2><p>We study official product information, pricing, licensing, limitations, support details and realistic use cases. When a product has not been personally tested, that fact should be stated clearly.</p><h2>Editorial principles</h2><ul><li>Separate facts from vendor claims.</li><li>Avoid guaranteed income or performance claims.</li><li>Show important limitations and buyer risks.</li><li>Disclose affiliate relationships.</li></ul>"
+      "title": "About Me",
+      "content": "<p>I provide independent reviews, comparisons, and practical guides for digital tools, software, and online marketing products, helping you clearly understand how they work in real-world situations.</p><h2>How we review products</h2><p>I carefully examine official product details such as pricing, licensing, limitations, support, and realistic use cases. If a product has not been personally tested, I make that clear so you can evaluate it with the right expectations.</p><h2>Editorial principles</h2><ul><li>Present facts clearly, separate from vendor claims.</li><li>Avoid promising guaranteed results or performance.</li><li>Highlight key limitations and potential risks for buyers.</li><li>Be transparent about any affiliate relationships.</li></ul>"
     },
     "privacy": {
       "title": "Privacy Policy",
@@ -61,7 +62,7 @@ window.BLOG_DATA = {
       "content": "<p>Some links on this website may be affiliate links. The website may receive a commission when a visitor purchases through those links, at no additional cost to the buyer.</p><p>Testimonials, examples and vendor claims are not guarantees of typical results. Outcomes depend on skills, effort, market conditions, costs, platform rules and other factors.</p>"
     },
     "contact": {
-      "title": "Contact Us",
+      "title": "Contact Me",
       "content": "<p>Use the form below for corrections, support questions, partnership requests or editorial feedback.</p>"
     }
   },
