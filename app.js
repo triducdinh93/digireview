@@ -790,65 +790,420 @@
 
   const cleanNodeText = (node) => String(node?.textContent || "").replace(/\s+/g, " ").trim();
 
-  const normalizeImportedStructures = (holder, post) => {
-    const allDivs = [...holder.querySelectorAll("div")];
+  const directChildren = node => [...(node?.children || [])];
+  const directHeading = node => directChildren(node).find(child => /^H[2-4]$/.test(child.tagName));
+  const directMedia = node => directChildren(node).find(child => child.matches?.("video,iframe,object,embed,.content-video-wrap"));
+  const priceNumber = value => {
+    const match = String(value || "").replace(/,/g, "").match(/\$\s*(\d+(?:\.\d+)?)/);
+    return match ? Number(match[1]) : null;
+  };
+  const actionTextPattern = /\b(?:get|buy|download|access|start|launch|try|claim|order|join|view|check|see|shop|unlock|grab|visit|learn more)\b/i;
+  const normalizedHref = value => {
+    try {
+      const url = new URL(String(value || ""), location.href);
+      url.hash = "";
+      ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"].forEach(key => url.searchParams.delete(key));
+      return url.href.replace(/\/$/, "");
+    } catch {
+      return String(value || "").trim();
+    }
+  };
 
-    allDivs.forEach(container => {
-      const cards = [...container.children].filter(child => child.tagName === "DIV" && child.querySelector(":scope > h4") && child.querySelector(":scope > p"));
-      if (cards.length < 2 || cards.length !== container.children.length) return;
+  const isShortLabel = value => {
+    const text = String(value || "").replace(/\s+/g, " ").trim();
+    if (!text || text.length > 64) return false;
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length > 10) return false;
+    return !/[.!?]\s*$/.test(text) || /^(?:faq|pricing|overview|summary|verdict|bonus|cost|value|risk|ideal|watch|full library|what you download)/i.test(text);
+  };
 
-      const labels = cards.map(card => cleanNodeText(card.firstElementChild));
-      const numbered = labels.every((label, index) => label === String(index + 1));
-      const shortLead = labels.every(label => label && label.length <= 6 && !/\s{2,}/.test(label));
-      if (!numbered && !shortLead) return;
+  const markSectionKickers = holder => {
+    holder.querySelectorAll("section,.imported-section").forEach(section => {
+      section.classList.add("imported-section");
+      const children = directChildren(section);
+      const headingIndex = children.findIndex(child => /^H[2-4]$/.test(child.tagName));
+      if (headingIndex <= 0) return;
+      for (let index = 0; index < headingIndex; index += 1) {
+        const lead = children[index];
+        const text = cleanNodeText(lead);
+        if (!isShortLabel(text) || lead.querySelector("img,video,iframe,table,ul,ol,a")) continue;
+        lead.classList.add("section-kicker");
+      }
+    });
+  };
 
-      container.classList.add(numbered ? "imported-steps-grid" : "imported-feature-grid");
-      cards.forEach(card => {
-        card.classList.add(numbered ? "imported-step-card" : "imported-feature-card");
-        const title = card.querySelector(":scope > h4");
-        const lead = card.firstElementChild;
-        const description = card.querySelector(":scope > p");
-        if (title) title.classList.add("imported-card-title");
-        if (description) description.classList.add("imported-card-text");
-        if (lead && title && lead.tagName === "DIV") {
-          const head = document.createElement("div");
-          head.className = "imported-card-head";
-          lead.classList.add(numbered ? "step-badge" : "feature-icon");
-          card.insertBefore(head, lead);
-          head.appendChild(lead);
-          head.appendChild(title);
+  const canonicalizeDirectoryTrees = holder => {
+    holder.querySelectorAll("div").forEach(node => {
+      if (node.closest("pre,.directory-tree") || node.querySelector("h2,h3,h4,table,ul,ol,img,video,iframe,a")) return;
+      const raw = String(node.innerText || node.textContent || "").replace(/\r/g, "");
+      const markers = (raw.match(/[├└│]|\.(?:mp4|mp3|png|jpg|txt|zip)\b/gi) || []).length;
+      const lines = raw.split("\n").map(line => line.replace(/[ \t]+/g, " ").trimEnd()).filter(line => line.trim());
+      if (markers < 4 || lines.length < 4) return;
+      const pre = document.createElement("pre");
+      pre.className = "directory-tree";
+      const code = document.createElement("code");
+      code.textContent = lines.join("\n");
+      pre.appendChild(code);
+      node.replaceWith(pre);
+    });
+  };
+
+  const canonicalizeCatalogLists = holder => {
+    holder.querySelectorAll("div").forEach(container => {
+      if (container.closest(".catalog-list,.pricing-grid,.media-gallery")) return;
+      const children = directChildren(container);
+      if (children.length < 8 || children.length > 120) return;
+      const parsed = children.map(child => {
+        const first = child.firstElementChild;
+        const numberText = cleanNodeText(first);
+        if (!first || first.tagName !== "SPAN" || !/^\d{1,3}$/.test(numberText)) return null;
+        const clone = child.cloneNode(true);
+        clone.firstElementChild?.remove();
+        const label = cleanNodeText(clone);
+        return label ? { number: Number(numberText), label } : null;
+      });
+      if (parsed.some(item => !item)) return;
+      const list = document.createElement("ol");
+      list.className = "catalog-list";
+      if (parsed[0].number !== 1) list.start = parsed[0].number;
+      parsed.forEach(item => {
+        const li = document.createElement("li");
+        li.textContent = item.label;
+        list.appendChild(li);
+      });
+      container.replaceWith(list);
+    });
+  };
+
+  const canonicalizeVideoCards = holder => {
+    const mediaSelector = "video,iframe,object,embed,.content-video-wrap";
+    holder.querySelectorAll("div,section").forEach(card => {
+      if (card.classList.contains("content-video-wrap") || card.classList.contains("media-gallery")) return;
+      const children = directChildren(card);
+      const mediaChild = children.find(child => child.matches?.(mediaSelector) || child.querySelector?.(mediaSelector));
+      if (!mediaChild) return;
+      const mediaCount = card.querySelectorAll("video,iframe,object,embed").length;
+      if (mediaCount !== 1 || children.length < 2 || children.length > 4) return;
+      const caption = children.find(child => child !== mediaChild && cleanNodeText(child));
+      if (!caption || caption.querySelector("h2,h3,ul,ol,table,img,video,iframe")) return;
+      card.classList.add("media-card");
+      caption.classList.add("media-caption");
+      const strong = caption.querySelector("strong");
+      if (strong) strong.classList.add("media-caption-title");
+    });
+
+    holder.querySelectorAll("div,section").forEach(container => {
+      if (container.classList.contains("media-card")) return;
+      const children = directChildren(container);
+      if (children.length < 2 || children.length > 8) return;
+      if (!children.every(child => child.classList.contains("media-card") || (child.querySelector("video,iframe,object,embed") && child.querySelectorAll("video,iframe,object,embed").length === 1))) return;
+      container.classList.add("media-gallery");
+      children.forEach(child => child.classList.add("media-card"));
+    });
+  };
+
+  const canonicalizeRepeatedCards = holder => {
+    holder.querySelectorAll("div,section").forEach(container => {
+      if (container.closest(".media-gallery,.pricing-grid,.catalog-list") || container.classList.contains("content-video-wrap")) return;
+      const children = directChildren(container);
+      if (children.length < 2 || children.length > 8) return;
+      if (!children.every(child => ["DIV", "SECTION", "ARTICLE"].includes(child.tagName))) return;
+      const cardInfo = children.map(card => {
+        const heading = directHeading(card);
+        const badge = directChildren(card).find(child => child !== heading && isShortLabel(cleanNodeText(child)) && /^0?\d{1,2}$/.test(cleanNodeText(child)));
+        const hasBody = Boolean(card.querySelector(":scope > p, :scope > ul, :scope > ol"));
+        return { card, heading, badge, hasBody };
+      });
+      if (!cardInfo.every(item => item.heading && item.hasBody)) return;
+
+      const isComparison = cardInfo.length === 2 && cardInfo.every(item => item.card.querySelector(":scope > ul, :scope > ol"));
+      const isNumbered = cardInfo.every(item => item.badge);
+      container.classList.add(isComparison ? "comparison-grid" : isNumbered ? "numbered-card-grid" : "content-card-grid");
+
+      cardInfo.forEach((item, index) => {
+        item.card.classList.add(isComparison ? "comparison-card" : isNumbered ? "numbered-card" : "content-card");
+        if (isComparison) {
+          const title = cleanNodeText(item.heading).toLowerCase();
+          const body = cleanNodeText(item.card);
+          if (/without|not|avoid|cons|limitations|wrong|before/i.test(title) || /✗|×/.test(body)) item.card.classList.add("is-negative");
+          if (/with|perfect|pros|benefits|included|best/i.test(title) || /✓|✔/.test(body)) item.card.classList.add("is-positive");
         }
+        if (isNumbered && item.badge) {
+          item.badge.classList.add("card-number");
+          const header = document.createElement("div");
+          header.className = "card-heading-row";
+          item.card.insertBefore(header, item.badge);
+          header.appendChild(item.badge);
+          header.appendChild(item.heading);
+        }
+        item.heading.classList.add("card-title");
       });
     });
+  };
 
-    allDivs.forEach(container => {
-      const children = [...container.children];
-      if (children.length !== 2) return;
-      const [first, second] = children;
-      if (first.tagName !== "DIV" || second.tagName !== "DIV") return;
-      if (cleanNodeText(first).length > 4) return;
-      if (!second.querySelector("p strong, strong")) return;
-      container.classList.add("imported-highlight-box");
-      first.classList.add("imported-highlight-icon");
-      second.classList.add("imported-highlight-body");
+  const canonicalizeValueLists = holder => {
+    holder.querySelectorAll("div").forEach(container => {
+      if (container.closest(".pricing-grid,.catalog-list,.media-gallery,.value-list")) return;
+      const rows = directChildren(container);
+      if (rows.length < 3 || rows.length > 12) return;
+      const valid = rows.every(row => {
+        if (row.querySelector("h2,h3,h4,ul,ol,table,img,video,iframe,a")) return false;
+        const spans = directChildren(row).filter(child => child.tagName === "SPAN");
+        return spans.length >= 2 && cleanNodeText(spans[0]) && cleanNodeText(spans[spans.length - 1]);
+      });
+      if (!valid) return;
+      const moneyRows = rows.filter(row => priceNumber(cleanNodeText(row)) !== null).length;
+      if (moneyRows < Math.ceil(rows.length / 2)) return;
+      container.classList.add("value-list");
+      rows.forEach(row => {
+        row.classList.add("value-row");
+        const spans = directChildren(row).filter(child => child.tagName === "SPAN");
+        spans[0].classList.add("value-label");
+        spans[spans.length - 1].classList.add("value-amount");
+      });
+    });
+  };
+
+  const buildPricingCard = card => {
+    if (card.classList.contains("pricing-card")) return;
+    const direct = directChildren(card);
+    const priceElements = direct.filter(child => {
+      const text = cleanNodeText(child);
+      return text.length <= 24 && priceNumber(text) !== null && !child.querySelector("ul,ol,a");
+    });
+    if (!priceElements.length || !card.querySelector(":scope > ul, :scope > ol")) return;
+
+    const labels = direct.filter(child => child !== priceElements[0] && !priceElements.includes(child) && ["DIV", "P"].includes(child.tagName) && cleanNodeText(child).length <= 60 && !child.querySelector("ul,ol,a"));
+    const values = priceElements.map(element => ({ element, value: priceNumber(cleanNodeText(element)), text: cleanNodeText(element) })).filter(item => item.value !== null);
+    const unique = [...new Map(values.map(item => [item.text, item])).values()];
+    const current = unique.length ? unique.reduce((best, item) => item.value < best.value ? item : best, unique[0]) : null;
+    const old = unique.length > 1 ? unique.reduce((best, item) => item.value > best.value ? item : best, unique[0]) : null;
+
+    card.classList.add("pricing-card");
+    const combined = cleanNodeText(card);
+    if (/best value|launch|today|recommended|popular/i.test(combined)) card.classList.add("is-featured");
+
+    const head = document.createElement("div");
+    head.className = "pricing-card-head";
+    const badgeText = labels.map(cleanNodeText).find(text => /best value|regular price|launch|recommended|popular/i.test(text));
+    if (badgeText) {
+      const badge = document.createElement("span");
+      badge.className = "pricing-badge";
+      badge.textContent = badgeText;
+      head.appendChild(badge);
+    }
+    if (old && current && old.value > current.value) {
+      const oldPrice = document.createElement("span");
+      oldPrice.className = "pricing-old";
+      oldPrice.textContent = old.text;
+      head.appendChild(oldPrice);
+    }
+    if (current) {
+      const currentPrice = document.createElement("strong");
+      currentPrice.className = "pricing-current";
+      currentPrice.textContent = current.text;
+      head.appendChild(currentPrice);
+    }
+    const noteText = labels.map(cleanNodeText).find(text => text !== badgeText && !/^\$/.test(text));
+    if (noteText) {
+      const note = document.createElement("span");
+      note.className = "pricing-note";
+      note.textContent = noteText;
+      head.appendChild(note);
+    }
+    [...priceElements, ...labels].forEach(element => element.remove());
+    card.prepend(head);
+    card.querySelectorAll(":scope > a[href]").forEach(link => link.classList.add("imported-cta"));
+  };
+
+  const canonicalizePricing = holder => {
+    holder.querySelectorAll("div,section").forEach(container => {
+      if (container.closest(".pricing-grid") || container.classList.contains("pricing-card")) return;
+      const children = directChildren(container);
+      const candidates = children.filter(child => {
+        if (!["DIV", "SECTION", "ARTICLE"].includes(child.tagName) || !child.querySelector(":scope > ul, :scope > ol")) return false;
+        return directChildren(child).some(block => {
+          const text = cleanNodeText(block);
+          return text.length <= 24 && priceNumber(text) !== null && !block.querySelector("ul,ol,a");
+        });
+      });
+      if (candidates.length >= 2 && candidates.length === children.length) {
+        container.classList.add("pricing-grid");
+        candidates.forEach(buildPricingCard);
+      }
+    });
+    holder.querySelectorAll(".imported-section > div").forEach(card => {
+      const hasDirectPrice = directChildren(card).some(block => {
+        const text = cleanNodeText(block);
+        return text.length <= 24 && priceNumber(text) !== null && !block.querySelector("ul,ol,a");
+      });
+      if (hasDirectPrice && card.querySelector(":scope > ul, :scope > ol") && !card.closest(".pricing-grid")) buildPricingCard(card);
+    });
+  };
+
+  const canonicalizePromosAndCtas = (holder, post) => {
+    holder.querySelectorAll(".imported-cta,.imported-cta-wrap,.promo-card").forEach(node => node.classList.remove("imported-cta", "imported-cta-wrap", "promo-card"));
+
+    holder.querySelectorAll("a[href]").forEach(link => {
+      if (link.querySelector("img")) return;
+      const text = cleanNodeText(link);
+      const href = link.getAttribute("href") || "";
+      const action = actionTextPattern.test(text) || /\$\s*\d/.test(text) || (post?.affiliateUrl && normalizedHref(href) === normalizedHref(post.affiliateUrl));
+      if (!action) return;
+      link.classList.add("imported-cta");
+      const parent = link.parentElement;
+      if (parent && parent.children.length === 1 && cleanNodeText(parent).length <= 180) parent.classList.add("imported-cta-wrap");
+      const region = link.closest(".imported-section,section,div");
+      if (region && region.querySelector("h2,h3") && cleanNodeText(region).split(/\s+/).length <= 90 && !region.querySelector("table,video,iframe,ol,ul:not(.pricing-card ul),img")) region.classList.add("promo-card");
     });
 
-    allDivs.forEach(container => {
-      const children = [...container.children];
-      if (children.length < 4 || children.length > 8) return;
-      if (container.querySelector(":scope > h2, :scope > h3, :scope > h4, :scope > ul, :scope > ol, :scope > table, :scope > img")) return;
-      const joined = cleanNodeText(container).toLowerCase();
-      if (!(/\$\d|one-time|coupon|off|usually|launch your|get it now/.test(joined) && children.some(child => child.tagName === "A"))) return;
-      container.classList.add("imported-pricing-box");
-      const blocks = children.filter(child => ["DIV", "P"].includes(child.tagName));
-      if (blocks[0]) blocks[0].classList.add("pricing-old");
-      if (blocks[1]) blocks[1].classList.add("pricing-current");
-      if (blocks[2]) blocks[2].classList.add("pricing-save");
-      if (blocks[3]) blocks[3].classList.add("pricing-note");
-      if (blocks.length > 4 && blocks[blocks.length - 1]) blocks[blocks.length - 1].classList.add("pricing-coupon");
-      const cta = children.find(child => child.tagName === "A");
-      if (cta) cta.classList.add("imported-pricing-cta");
+    const actionLinks = [...holder.querySelectorAll("a.imported-cta")];
+    const keep = new Set();
+    const byHref = new Map();
+    actionLinks.forEach(link => {
+      const key = normalizedHref(link.getAttribute("href"));
+      if (!byHref.has(key)) byHref.set(key, []);
+      byHref.get(key).push(link);
     });
+    byHref.forEach(links => {
+      const pricing = links.find(link => link.closest(".pricing-card"));
+      keep.add(links[0]);
+      if (pricing) keep.add(pricing);
+      keep.add(links[links.length - 1]);
+    });
+
+    const preferred = actionLinks.filter(link => keep.has(link));
+    if (preferred.length > 4) {
+      const finalKeep = new Set([
+        preferred[0],
+        preferred.find(link => link.closest(".pricing-card")),
+        preferred[Math.floor(preferred.length / 2)],
+        preferred[preferred.length - 1]
+      ].filter(Boolean));
+      keep.clear();
+      finalKeep.forEach(link => keep.add(link));
+    }
+
+    actionLinks.forEach(link => {
+      if (keep.has(link)) return;
+      const wrap = link.closest(".promo-card,.imported-cta-wrap");
+      if (wrap && cleanNodeText(wrap).split(/\s+/).length <= 90) {
+        wrap.remove();
+      } else {
+        const text = document.createTextNode(cleanNodeText(link));
+        link.replaceWith(text);
+      }
+    });
+  };
+
+  const canonicalizeOrphanNotes = holder => {
+    holder.querySelectorAll(".imported-section").forEach(section => {
+      directChildren(section).forEach(child => {
+        if (!child.matches("p,div") || child.classList.length || child.querySelector("a,img,video,iframe,table,ul,ol,h2,h3,h4,details,pre")) return;
+        const text = cleanNodeText(child);
+        if (!text || text.length > 90) return;
+        if (/^(?:✓|✔|✗|×|🔒|🛡️|♾️)|\b(?:included|save|only|best for|total value|one-time|no upsell|guarantee)\b/i.test(text)) child.classList.add("inline-note");
+      });
+    });
+  };
+
+  const normalizeImportedStructures = (holder, post) => {
+    markSectionKickers(holder);
+    canonicalizeDirectoryTrees(holder);
+    canonicalizeCatalogLists(holder);
+    canonicalizeVideoCards(holder);
+    canonicalizeRepeatedCards(holder);
+    canonicalizeValueLists(holder);
+    canonicalizePricing(holder);
+    canonicalizeOrphanNotes(holder);
+    canonicalizePromosAndCtas(holder, post);
+    markSectionKickers(holder);
+  };
+
+  const unwrapImportedNode = node => node.replaceWith(...node.childNodes);
+
+  const safeImportedClass = value => String(value || "")
+    .split(/\s+/)
+    .filter(name => /^(?:imported-|content-|table-scroll|code-scroll|section-kicker|layout-contained|media-|card-|numbered-|comparison-|pricing-|value-|catalog-|directory-|promo-|inline-note)/.test(name))
+    .join(" ");
+
+  const stripUnsafeImportedAttributes = holder => {
+    const allowed = {
+      A: new Set(["href", "title"]),
+      IMG: new Set(["src", "alt", "title", "loading", "decoding"]),
+      VIDEO: new Set(["poster", "controls", "preload", "playsinline"]),
+      SOURCE: new Set(["src", "type"]),
+      IFRAME: new Set(["src", "title", "loading", "allowfullscreen", "referrerpolicy"]),
+      OBJECT: new Set(["data", "type"]),
+      EMBED: new Set(["src", "type"]),
+      TD: new Set(["colspan", "rowspan"]),
+      TH: new Set(["colspan", "rowspan", "scope"]),
+      DETAILS: new Set(["open"]),
+      OL: new Set(["start"])
+    };
+
+    holder.querySelectorAll("*").forEach(element => {
+      const keep = allowed[element.tagName] || new Set();
+      [...element.attributes].forEach(attribute => {
+        const name = attribute.name.toLowerCase();
+        if (name === "class") {
+          const classes = safeImportedClass(attribute.value);
+          if (classes) element.className = classes;
+          else element.removeAttribute("class");
+          return;
+        }
+        if (!keep.has(name)) element.removeAttribute(attribute.name);
+      });
+    });
+  };
+
+  const normalizeGenericImportedBlocks = holder => {
+    holder.querySelectorAll("font,center").forEach(unwrapImportedNode);
+    holder.querySelectorAll("b").forEach(node => { node.outerHTML = `<strong>${node.innerHTML}</strong>`; });
+    holder.querySelectorAll("i").forEach(node => { node.outerHTML = `<em>${node.innerHTML}</em>`; });
+    holder.querySelectorAll("h5,h6").forEach(node => { node.outerHTML = `<h4>${node.innerHTML}</h4>`; });
+
+    holder.querySelectorAll("section,div").forEach(node => {
+      const text = cleanNodeText(node);
+      const firstLabel = cleanNodeText(node.querySelector(":scope > h2, :scope > h3, :scope > h4, :scope > p, :scope > div"));
+      const anchors = node.querySelectorAll("a").length;
+      if ((/^navigation$/i.test(firstLabel) || /^navigation\b/i.test(text)) && anchors >= 4) node.remove();
+    });
+
+    holder.querySelectorAll("section").forEach(section => {
+      section.classList.add("imported-section");
+      const children = [...section.children];
+      const headingIndex = children.findIndex(child => /^H[2-4]$/.test(child.tagName));
+      if (headingIndex > 0) {
+        const lead = children[0];
+        const label = cleanNodeText(lead);
+        if (label && label.length <= 45 && !lead.querySelector("img,video,table,ul,ol")) lead.classList.add("section-kicker");
+      }
+    });
+
+    holder.querySelectorAll("details").forEach(details => {
+      details.classList.add("imported-faq");
+      if (!details.querySelector(":scope > summary")) {
+        const summary = document.createElement("summary");
+        summary.textContent = "More details";
+        details.prepend(summary);
+      }
+    });
+
+    holder.querySelectorAll("figure").forEach(figure => figure.classList.add("imported-figure"));
+
+    for (let pass = 0; pass < 4; pass += 1) {
+      holder.querySelectorAll("div,section").forEach(node => {
+        const directText = [...node.childNodes]
+          .filter(child => child.nodeType === Node.TEXT_NODE)
+          .map(child => child.textContent)
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (node.className || directText || node.querySelector(":scope > h2, :scope > h3, :scope > h4")) return;
+        if (node.children.length === 1 && !node.querySelector(":scope > table, :scope > video, :scope > iframe, :scope > details")) unwrapImportedNode(node);
+      });
+    }
   };
 
   const sanitizeArticleHtml = (post) => {
@@ -860,49 +1215,48 @@
     while (walker.nextNode()) comments.push(walker.currentNode);
     comments.forEach(comment => comment.remove());
 
-    holder.querySelectorAll("script,style,noscript,form,input,textarea,select,button,iframe").forEach(node => node.remove());
+    holder.querySelectorAll("script,style,noscript,nav,header,footer,aside,form,input,textarea,select,button,dialog,template,svg,canvas").forEach(node => node.remove());
     holder.querySelectorAll("main,article").forEach(node => node.classList.add("imported-root"));
 
+    holder.querySelectorAll("iframe").forEach(iframe => {
+      const src = iframe.getAttribute("src") || "";
+      if (!/^https:\/\/(?:www\.)?(?:youtube\.com\/embed|youtube-nocookie\.com\/embed|player\.vimeo\.com\/video)\//i.test(src)) iframe.remove();
+    });
+
+    stripUnsafeImportedAttributes(holder);
+    normalizeGenericImportedBlocks(holder);
+
     holder.querySelectorAll("h1").forEach(heading => {
-      if (heading.textContent.trim().toLowerCase() === String(post.title || "").trim().toLowerCase()) heading.remove();
+      if (cleanNodeText(heading).toLowerCase() === String(post.title || "").trim().toLowerCase()) heading.remove();
       else heading.outerHTML = `<h2>${heading.innerHTML}</h2>`;
     });
 
     holder.querySelectorAll("h2,h3,h4,p,div,section").forEach(element => {
-      const text = element.textContent.replace(/\s+/g, " ").trim();
-      if (!text && !element.querySelector("img,video,audio,object,embed,table,ul,ol,blockquote")) {
+      const text = cleanNodeText(element);
+      if (!text && !element.querySelector("img,video,iframe,audio,object,embed,table,ul,ol,blockquote,details,pre")) {
         element.remove();
         return;
       }
-      if (/^(table of contents|contents)$/i.test(text)) {
-        element.remove();
-        return;
-      }
-      if (/^disclosure\s*:/i.test(text) || /^review snapshot$/i.test(text)) {
-        element.remove();
-        return;
-      }
+      if (/^(table of contents|contents)$/i.test(text)) { element.remove(); return; }
+      if (/^disclosure\s*:/i.test(text) || /^review snapshot$/i.test(text)) { element.remove(); return; }
       if (/^quick summary\s*:/i.test(text)) element.classList.add("imported-callout");
       if (element.matches("div,section") && element.querySelector(":scope > h2, :scope > h3")) element.classList.add("imported-section");
     });
 
     holder.querySelectorAll("a[href]").forEach(link => {
       const href = link.getAttribute("href") || "";
+      if (/^javascript:/i.test(href)) { unwrapImportedNode(link); return; }
       if (/^https?:/i.test(href)) {
         link.target = "_blank";
         link.rel = "noopener sponsored nofollow";
-      }
-      const parent = link.parentElement;
-      const parentText = parent?.textContent.replace(/\s+/g, " ").trim() || "";
-      if (parent && parent.children.length === 1 && parentText.length <= 120 && !link.querySelector("img")) {
-        parent.classList.add("imported-cta-wrap");
-        link.classList.add("imported-cta");
       }
     });
 
     holder.querySelectorAll("img").forEach(image => {
       image.loading = "lazy";
       image.decoding = "async";
+      image.removeAttribute("width");
+      image.removeAttribute("height");
       const label = `${image.alt || ""} ${image.src || ""}`;
       if (/favicon|avatar|profile|small.?icon/i.test(label)) image.classList.add("content-icon");
       else image.classList.add("content-media");
@@ -910,6 +1264,7 @@
       if (link) link.classList.add("content-media-link");
       if (!image.closest("figure") && !link) {
         const figure = document.createElement("figure");
+        figure.className = "imported-figure";
         image.replaceWith(figure);
         figure.appendChild(image);
       }
@@ -919,18 +1274,12 @@
       video.classList.add("content-video");
       video.controls = true;
       video.preload = "metadata";
+      video.setAttribute("playsinline", "");
       video.removeAttribute("width");
       video.removeAttribute("height");
       video.removeAttribute("autoplay");
-      video.style.removeProperty("width");
-      video.style.removeProperty("height");
-      video.style.removeProperty("max-width");
-      video.style.removeProperty("max-height");
-      video.style.removeProperty("position");
-      video.style.removeProperty("left");
-      video.style.removeProperty("right");
-      video.style.removeProperty("transform");
-
+      video.removeAttribute("loop");
+      video.removeAttribute("muted");
       if (!video.parentElement?.classList.contains("content-video-wrap")) {
         const wrap = document.createElement("div");
         wrap.className = "content-video-wrap";
@@ -939,12 +1288,10 @@
       }
     });
 
-    holder.querySelectorAll("object,embed").forEach(media => {
+    holder.querySelectorAll("iframe,object,embed").forEach(media => {
       media.classList.add("content-embedded-media");
       media.removeAttribute("width");
       media.removeAttribute("height");
-      media.style.removeProperty("width");
-      media.style.removeProperty("height");
       if (!media.parentElement?.classList.contains("content-video-wrap")) {
         const wrap = document.createElement("div");
         wrap.className = "content-video-wrap";
@@ -961,42 +1308,94 @@
       wrap.appendChild(table);
     });
 
+    holder.querySelectorAll("pre").forEach(pre => {
+      if (pre.parentElement?.classList.contains("code-scroll")) return;
+      const wrap = document.createElement("div");
+      wrap.className = "code-scroll";
+      pre.replaceWith(wrap);
+      wrap.appendChild(pre);
+    });
+
     holder.querySelectorAll("p,div").forEach(element => {
       const links = [...element.querySelectorAll(":scope > a")];
       const onlyDirectLink = links.length === 1 && [...element.children].every(child => child.tagName === "A");
       if (!onlyDirectLink) return;
       const href = links[0].href || "";
-      const label = links[0].textContent.replace(/\s+/g, " ").trim();
+      const label = cleanNodeText(links[0]);
       if (href === post.externalUrl || label.toLowerCase() === String(post.title || "").toLowerCase()) element.remove();
     });
 
     normalizeImportedStructures(holder, post);
+    normalizeGenericImportedBlocks(holder);
     return holder.innerHTML;
   };
 
+  const auditArticleLayout = () => {
+    const content = document.getElementById("article-content");
+    if (!content) return;
+    const width = content.clientWidth;
+    content.querySelectorAll("*").forEach(element => {
+      element.classList.remove("layout-contained");
+      const rect = element.getBoundingClientRect();
+      if (rect.width > width + 3 || element.scrollWidth > Math.max(element.clientWidth + 3, width + 3)) {
+        element.classList.add("layout-contained");
+      }
+    });
+  };
+
   const prepareArticleMedia = () => {
-    document.querySelectorAll("#article-content img").forEach(image => {
+    const content = document.getElementById("article-content");
+    if (!content) return;
+
+    content.querySelectorAll("img").forEach(image => {
       const classify = () => {
-        image.classList.remove("content-icon", "content-tall-media");
+        image.classList.remove("content-icon", "content-tall-media", "content-portrait-media", "content-landscape-media");
         const width = Number(image.naturalWidth || 0);
         const height = Number(image.naturalHeight || 0);
         if (!width || !height) return;
-
+        const ratio = height / width;
         if (width <= 220 && height <= 220) {
           image.classList.remove("content-media");
           image.classList.add("content-icon");
           return;
         }
-
         image.classList.add("content-media");
-        if (height / width >= 1.28 || height >= 1500) {
+        const wrapper = image.closest("figure, a.content-media-link");
+        wrapper?.classList.remove("contains-tall-media", "contains-portrait-media", "contains-landscape-media");
+        if (ratio >= 1.75 || height >= 1800) {
           image.classList.add("content-tall-media");
-          image.closest("figure, a.content-media-link")?.classList.add("contains-tall-media");
+          wrapper?.classList.add("contains-tall-media");
+        } else if (ratio >= 1.12) {
+          image.classList.add("content-portrait-media");
+          wrapper?.classList.add("contains-portrait-media");
+        } else {
+          image.classList.add("content-landscape-media");
+          wrapper?.classList.add("contains-landscape-media");
         }
+        auditArticleLayout();
       };
       if (image.complete) classify();
       else image.addEventListener("load", classify, { once: true });
     });
+
+    content.querySelectorAll("video").forEach(video => {
+      const classify = () => {
+        const wrap = video.closest(".content-video-wrap");
+        if (!wrap) return;
+        wrap.classList.toggle("is-portrait-video", Number(video.videoHeight || 0) > Number(video.videoWidth || 0));
+        auditArticleLayout();
+      };
+      if (video.readyState >= 1) classify();
+      else video.addEventListener("loadedmetadata", classify, { once: true });
+    });
+
+    window.requestAnimationFrame(auditArticleLayout);
+    document.fonts?.ready?.then(auditArticleLayout).catch(() => {});
+    if (typeof ResizeObserver === "function") {
+      const observer = new ResizeObserver(() => window.requestAnimationFrame(auditArticleLayout));
+      observer.observe(content);
+      window.setTimeout(() => observer.disconnect(), 12000);
+    }
   };
 
   const renderPost = async (post) => {

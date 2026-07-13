@@ -1,9 +1,9 @@
 {
   "name": "digireview-google-sites-autofill",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Free Google Sites extraction with GitHub Actions and Playwright.",
+  "description": "Canonical Google Sites import normalization with GitHub Actions and Playwright.",
   "scripts": {
     "autofill": "node extract-google-sites.mjs"
   },

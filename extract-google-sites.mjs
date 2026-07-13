@@ -100,35 +100,222 @@ async function autoScroll(page) {
   }).catch(() => {});
 }
 
+async function validateCanonicalLayout(browser, html) {
+  const css = await fs.readFile(path.resolve("style.css"), "utf8").catch(() => "");
+  const viewports = [
+    { name: "desktop", width: 1440, height: 900 },
+    { name: "mobile", width: 390, height: 844 }
+  ];
+  const warnings = [];
+  const measurements = {};
+
+  for (const viewport of viewports) {
+    const context = await browser.newContext({ viewport });
+    const page = await context.newPage();
+    await page.route("**/*", route => route.abort()).catch(() => {});
+    await page.setContent(
+      `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body><main style="max-width:1180px;margin:auto"><div class="article-layout"><article class="article-main"><div id="article-content" class="article-content">${html}</div></article></div></main></body></html>`,
+      { waitUntil: "domcontentloaded" }
+    );
+
+    const result = await page.evaluate(() => {
+      const content = document.getElementById("article-content");
+      const contentRect = content.getBoundingClientRect();
+      const allowed = element => Boolean(element.closest(".table-scroll,.code-scroll,.directory-tree"));
+      const overflow = [...content.querySelectorAll("*")]
+        .filter(element => !allowed(element))
+        .filter(element => {
+          const rect = element.getBoundingClientRect();
+          return rect.right > contentRect.right + 3 || rect.left < contentRect.left - 3 || rect.width > contentRect.width + 3;
+        })
+        .slice(0, 12)
+        .map(element => ({ tag: element.tagName, className: String(element.className || ""), width: Math.round(element.getBoundingClientRect().width) }));
+      return {
+        overflow,
+        mediaCardsWithoutCaption: [...content.querySelectorAll(".media-card")].filter(card => !card.querySelector(".media-caption")).length,
+        rawVideoCount: [...content.querySelectorAll("video,iframe,object,embed")].filter(media => !media.closest(".content-video-wrap")).length,
+        rawPriceBlocks: [...content.querySelectorAll("div,section")].filter(node => /\$\s*\d/.test(node.textContent || "") && node.querySelector(":scope > ul, :scope > ol") && !node.closest(".pricing-card,.pricing-grid")).length
+      };
+    });
+    measurements[viewport.name] = result;
+    if (result.overflow.length) warnings.push(`${viewport.name}: ${result.overflow.length} element(s) exceeded the article column.`);
+    if (result.mediaCardsWithoutCaption) warnings.push(`${viewport.name}: ${result.mediaCardsWithoutCaption} media card(s) have no normalized caption.`);
+    if (result.rawVideoCount) warnings.push(`${viewport.name}: ${result.rawVideoCount} video embed(s) are outside the responsive media wrapper.`);
+    await context.close();
+  }
+
+  return { warnings: [...new Set(warnings)], measurements };
+}
+
 async function inspectFrame(frame) {
   return frame.evaluate(() => {
     const absolute = value => {
-      try {
-        return new URL(value, location.href).href;
-      } catch {
-        return "";
-      }
+      try { return new URL(value, location.href).href; }
+      catch { return ""; }
+    };
+    const normalize = value => String(value || "").replace(/\s+/g, " ").trim();
+    const directText = node => normalize([...node.childNodes]
+      .filter(child => child.nodeType === Node.TEXT_NODE)
+      .map(child => child.textContent)
+      .join(" "));
+    const unwrap = node => node.replaceWith(...node.childNodes);
+
+    const directChildren = node => [...(node?.children || [])];
+    const directHeading = node => directChildren(node).find(child => /^H[2-4]$/.test(child.tagName));
+    const priceNumber = value => {
+      const match = String(value || "").replace(/,/g, "").match(/\$\s*(\d+(?:\.\d+)?)/);
+      return match ? Number(match[1]) : null;
+    };
+    const actionPattern = /\b(?:get|buy|download|access|start|launch|try|claim|order|join|view|check|see|shop|unlock|grab|visit|learn more)\b/i;
+    const isShortLabel = value => {
+      const text = normalize(value);
+      if (!text || text.length > 64 || text.split(/\s+/).length > 10) return false;
+      return true;
     };
 
-    const normalize = value => String(value || "").replace(/\s+/g, " ").trim();
+    const canonicalizeClone = clone => {
+      clone.querySelectorAll("section,.imported-section").forEach(section => {
+        section.classList.add("imported-section");
+        const children = directChildren(section);
+        const headingIndex = children.findIndex(child => /^H[2-4]$/.test(child.tagName));
+        if (headingIndex > 0) {
+          children.slice(0, headingIndex).forEach(lead => {
+            const text = normalize(lead.textContent);
+            if (isShortLabel(text) && !lead.querySelector("img,video,iframe,table,ul,ol,a")) lead.classList.add("section-kicker");
+          });
+        }
+      });
+
+      clone.querySelectorAll("div").forEach(node => {
+        if (node.closest("pre,.directory-tree") || node.querySelector("h2,h3,h4,table,ul,ol,img,video,iframe,a")) return;
+        const raw = String(node.innerText || node.textContent || "").replace(/\r/g, "");
+        const markers = (raw.match(/[├└│]|\.(?:mp4|mp3|png|jpg|txt|zip)\b/gi) || []).length;
+        const lines = raw.split("\n").map(line => line.replace(/[ \t]+/g, " ").trimEnd()).filter(line => line.trim());
+        if (markers < 4 || lines.length < 4) return;
+        const pre = document.createElement("pre");
+        pre.className = "directory-tree";
+        const code = document.createElement("code");
+        code.textContent = lines.join("\n");
+        pre.appendChild(code);
+        node.replaceWith(pre);
+      });
+
+      clone.querySelectorAll("div").forEach(container => {
+        const children = directChildren(container);
+        if (children.length < 8 || children.length > 120) return;
+        const parsed = children.map(child => {
+          const first = child.firstElementChild;
+          const number = normalize(first?.textContent);
+          if (!first || first.tagName !== "SPAN" || !/^\d{1,3}$/.test(number)) return null;
+          const copy = child.cloneNode(true);
+          copy.firstElementChild?.remove();
+          const label = normalize(copy.textContent);
+          return label ? { number: Number(number), label } : null;
+        });
+        if (parsed.some(item => !item)) return;
+        const ol = document.createElement("ol");
+        ol.className = "catalog-list";
+        if (parsed[0].number !== 1) ol.start = parsed[0].number;
+        parsed.forEach(item => {
+          const li = document.createElement("li");
+          li.textContent = item.label;
+          ol.appendChild(li);
+        });
+        container.replaceWith(ol);
+      });
+
+      clone.querySelectorAll("div,section").forEach(card => {
+        if (card.classList.contains("content-video-wrap")) return;
+        const children = directChildren(card);
+        const mediaChild = children.find(child => child.matches?.("video,iframe,object,embed,.content-video-wrap") || child.querySelector?.("video,iframe,object,embed,.content-video-wrap"));
+        if (!mediaChild || card.querySelectorAll("video,iframe,object,embed").length !== 1 || children.length < 2 || children.length > 4) return;
+        const caption = children.find(child => child !== mediaChild && normalize(child.textContent));
+        if (!caption || caption.querySelector("h2,h3,ul,ol,table,img,video,iframe")) return;
+        card.classList.add("media-card");
+        caption.classList.add("media-caption");
+        caption.querySelector("strong")?.classList.add("media-caption-title");
+      });
+      clone.querySelectorAll("div,section").forEach(container => {
+        const children = directChildren(container);
+        if (children.length >= 2 && children.length <= 8 && children.every(child => child.classList.contains("media-card"))) container.classList.add("media-gallery");
+      });
+
+      clone.querySelectorAll("div,section").forEach(container => {
+        if (container.closest(".media-gallery,.pricing-grid,.catalog-list") || container.classList.contains("content-video-wrap")) return;
+        const children = directChildren(container);
+        if (children.length < 2 || children.length > 8 || !children.every(child => ["DIV","SECTION","ARTICLE"].includes(child.tagName))) return;
+        const info = children.map(card => {
+          const heading = directHeading(card);
+          const badge = directChildren(card).find(child => child !== heading && /^0?\d{1,2}$/.test(normalize(child.textContent)));
+          return { card, heading, badge, hasBody: Boolean(card.querySelector(":scope > p, :scope > ul, :scope > ol")) };
+        });
+        if (!info.every(item => item.heading && item.hasBody)) return;
+        const comparison = info.length === 2 && info.every(item => item.card.querySelector(":scope > ul, :scope > ol"));
+        const numbered = info.every(item => item.badge);
+        container.classList.add(comparison ? "comparison-grid" : numbered ? "numbered-card-grid" : "content-card-grid");
+        info.forEach(item => {
+          item.card.classList.add(comparison ? "comparison-card" : numbered ? "numbered-card" : "content-card");
+          item.heading.classList.add("card-title");
+          if (numbered) {
+            item.badge.classList.add("card-number");
+            const row = document.createElement("div");
+            row.className = "card-heading-row";
+            item.card.insertBefore(row, item.badge);
+            row.appendChild(item.badge);
+            row.appendChild(item.heading);
+          }
+        });
+      });
+
+      clone.querySelectorAll("div").forEach(container => {
+        const rows = directChildren(container);
+        if (rows.length < 3 || rows.length > 12) return;
+        if (!rows.every(row => {
+          const spans = directChildren(row).filter(child => child.tagName === "SPAN");
+          return spans.length >= 2 && !row.querySelector("h2,h3,h4,ul,ol,table,img,video,iframe,a");
+        })) return;
+        if (rows.filter(row => priceNumber(normalize(row.textContent)) !== null).length < Math.ceil(rows.length / 2)) return;
+        container.classList.add("value-list");
+        rows.forEach(row => {
+          row.classList.add("value-row");
+          const spans = directChildren(row).filter(child => child.tagName === "SPAN");
+          spans[0].classList.add("value-label");
+          spans[spans.length - 1].classList.add("value-amount");
+        });
+      });
+
+      clone.querySelectorAll("div,section").forEach(container => {
+        const children = directChildren(container);
+        const cards = children.filter(child => {
+          if (!["DIV","SECTION","ARTICLE"].includes(child.tagName) || !child.querySelector(":scope > ul, :scope > ol")) return false;
+          return directChildren(child).some(block => {
+            const text = normalize(block.textContent);
+            return text.length <= 24 && priceNumber(text) !== null && !block.querySelector("ul,ol,a");
+          });
+        });
+        if (cards.length < 2 || cards.length !== children.length) return;
+        container.classList.add("pricing-grid");
+        cards.forEach(card => card.classList.add("pricing-card"));
+      });
+
+      clone.querySelectorAll("a[href]").forEach(link => {
+        if (link.querySelector("img")) return;
+        const label = normalize(link.textContent);
+        if (actionPattern.test(label) || /\$\s*\d/.test(label)) link.classList.add("imported-cta");
+      });
+    };
 
     const candidates = [
       ...document.querySelectorAll("article, main, [role='main'], .article, .post, .entry-content")
     ];
-
     if (document.body) candidates.push(document.body);
 
     let root = document.body;
     let longest = 0;
-
     for (const candidate of candidates) {
       const words = normalize(candidate.innerText || candidate.textContent || "")
-        .split(/\s+/)
-        .filter(Boolean).length;
-      if (words > longest) {
-        longest = words;
-        root = candidate;
-      }
+        .split(/\s+/).filter(Boolean).length;
+      if (words > longest) { longest = words; root = candidate; }
     }
 
     if (!root) {
@@ -141,26 +328,18 @@ async function inspectFrame(frame) {
         html: "",
         headings: [],
         paragraphs: [],
-        images: []
+        images: [],
+        warnings: ["No readable root element was found."],
+        stats: {}
       };
     }
 
     const headings = [...root.querySelectorAll("h1, h2, h3")]
-      .map(node => normalize(node.textContent))
-      .filter(Boolean)
-      .slice(0, 40);
-
+      .map(node => normalize(node.textContent)).filter(Boolean).slice(0, 60);
     const paragraphs = [...root.querySelectorAll("p")]
-      .map(node => normalize(node.textContent))
-      .filter(value => value.length >= 35)
-      .slice(0, 30);
-
+      .map(node => normalize(node.textContent)).filter(value => value.length >= 35).slice(0, 40);
     const documentTitle = normalize(document.title);
-    const title =
-      normalize(root.querySelector("h1")?.textContent) ||
-      headings[0] ||
-      documentTitle;
-
+    const title = normalize(root.querySelector("h1")?.textContent) || headings[0] || documentTitle;
     const description =
       normalize(document.querySelector('meta[name="description"]')?.content) ||
       normalize(document.querySelector('meta[property="og:description"]')?.content) ||
@@ -172,114 +351,238 @@ async function inspectFrame(frame) {
         const url = absolute(image.currentSrc || image.getAttribute("src") || "");
         const width = image.naturalWidth || Math.round(rect.width) || 0;
         const height = image.naturalHeight || Math.round(rect.height) || 0;
-        const label = normalize(
-          `${image.alt || ""} ${image.title || ""} ${url}`
-        );
-
+        const label = normalize(`${image.alt || ""} ${image.title || ""} ${url}`);
         let score = width * height;
         if (rect.top >= -100 && rect.top < 1600) score += 1_500_000;
         if (width >= 900 && height >= 350) score += 1_200_000;
         if (width / Math.max(height, 1) >= 1.25) score += 250_000;
-        if (/product|fortune|toolkit|template|spotlight|whatsapp|superpower|side.?hustle|plr|hero|banner/i.test(label)) {
-          score += 800_000;
-        }
-        if (/logo|icon|avatar|profile|favicon|google/i.test(label)) {
-          score -= 2_500_000;
-        }
-
+        if (/product|fortune|toolkit|template|spotlight|whatsapp|superpower|side.?hustle|plr|hero|banner/i.test(label)) score += 800_000;
+        if (/logo|icon|avatar|profile|favicon|google/i.test(label)) score -= 2_500_000;
         return { url, width, height, alt: image.alt || "", top: rect.top, index, score };
       })
-      .filter(image => image.url && image.width >= 360 && image.height >= 180)
+      .filter(image => image.url && image.width >= 300 && image.height >= 160)
       .sort((a, b) => b.score - a.score);
 
     const thumbnail = images[0]?.url || "";
-
     const clone = root.cloneNode(true);
 
     clone.querySelectorAll(
-      "script, style, noscript, iframe, nav, header, footer, form, input, textarea, select, button, dialog, svg, canvas, [aria-hidden='true']"
+      "script,style,noscript,nav,header,footer,form,input,textarea,select,button,dialog,template,svg,canvas,[aria-hidden='true']"
     ).forEach(node => node.remove());
 
+    clone.querySelectorAll("iframe").forEach(iframe => {
+      const src = absolute(iframe.getAttribute("src") || "");
+      if (!/^https:\/\/(?:www\.)?(?:youtube\.com\/embed|youtube-nocookie\.com\/embed|player\.vimeo\.com\/video)\//i.test(src)) {
+        iframe.remove();
+        return;
+      }
+      iframe.setAttribute("src", src);
+      iframe.setAttribute("loading", "lazy");
+      iframe.setAttribute("allowfullscreen", "");
+      iframe.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+    });
+
+    const allowedAttributes = {
+      A: new Set(["href", "title"]),
+      IMG: new Set(["src", "alt", "title"]),
+      VIDEO: new Set(["poster", "controls", "preload", "playsinline"]),
+      SOURCE: new Set(["src", "type"]),
+      IFRAME: new Set(["src", "title", "loading", "allowfullscreen", "referrerpolicy"]),
+      TD: new Set(["colspan", "rowspan"]),
+      TH: new Set(["colspan", "rowspan", "scope"]),
+      DETAILS: new Set(["open"]),
+      OL: new Set(["start"])
+    };
+
     clone.querySelectorAll("*").forEach(node => {
+      const allowed = allowedAttributes[node.tagName] || new Set();
       [...node.attributes].forEach(attribute => {
-        const name = attribute.name.toLowerCase();
-        if (
-          name.startsWith("on") ||
-          name === "style" ||
-          name === "srcset" ||
-          name === "class" ||
-          name === "id"
-        ) {
-          node.removeAttribute(attribute.name);
-        }
+        if (!allowed.has(attribute.name.toLowerCase())) node.removeAttribute(attribute.name);
       });
     });
 
-    clone.querySelectorAll("a[href]").forEach(link => {
-      const href = absolute(link.getAttribute("href"));
-      if (href) link.setAttribute("href", href);
-      link.setAttribute("target", "_blank");
-      link.setAttribute("rel", "noopener sponsored nofollow");
-    });
-
-    clone.querySelectorAll("img").forEach(image => {
-      const src = absolute(image.currentSrc || image.getAttribute("src") || "");
-      if (!src) {
-        image.remove();
-        return;
-      }
-      image.setAttribute("src", src);
-      image.setAttribute("loading", "lazy");
-      image.removeAttribute("width");
-      image.removeAttribute("height");
-    });
-
-    const firstH1 = clone.querySelector("h1");
-    if (firstH1 && normalize(firstH1.textContent).toLowerCase() === title.toLowerCase()) {
-      firstH1.remove();
-    }
-
-    if (thumbnail) {
-      const firstMatchingHero = [...clone.querySelectorAll("img")]
-        .find(image => absolute(image.getAttribute("src")) === thumbnail);
-      firstMatchingHero?.closest("figure, picture, div")?.remove?.() || firstMatchingHero?.remove();
-    }
-
-    const commentWalker = document.createTreeWalker(clone, NodeFilter.SHOW_COMMENT);
-    const comments = [];
-    while (commentWalker.nextNode()) comments.push(commentWalker.currentNode);
-    comments.forEach(comment => comment.remove());
-
+    clone.querySelectorAll("font,center").forEach(unwrap);
+    clone.querySelectorAll("b").forEach(node => { node.outerHTML = `<strong>${node.innerHTML}</strong>`; });
+    clone.querySelectorAll("i").forEach(node => { node.outerHTML = `<em>${node.innerHTML}</em>`; });
+    clone.querySelectorAll("h5,h6").forEach(node => { node.outerHTML = `<h4>${node.innerHTML}</h4>`; });
     clone.querySelectorAll("h1").forEach(heading => {
       if (normalize(heading.textContent).toLowerCase() === title.toLowerCase()) heading.remove();
       else heading.outerHTML = `<h2>${heading.innerHTML}</h2>`;
     });
 
-    clone.querySelectorAll("h2,h3,p,div,section").forEach(node => {
-      const value = normalize(node.textContent);
-      if (/^(table of contents|contents)$/i.test(value)) {
-        node.remove();
-        return;
-      }
-      if (/^quick summary\s*:/i.test(value)) node.classList.add("imported-callout");
-      if (node.matches("div,section") && node.querySelector(":scope > h2, :scope > h3")) node.classList.add("imported-section");
+    clone.querySelectorAll("a[href]").forEach(link => {
+      const href = absolute(link.getAttribute("href"));
+      if (!href || /^javascript:/i.test(href)) { unwrap(link); return; }
+      link.setAttribute("href", href);
+      link.setAttribute("target", "_blank");
+      link.setAttribute("rel", "noopener sponsored nofollow");
     });
 
-    clone.querySelectorAll("a[href]").forEach(link => {
-      const parent = link.parentElement;
-      const parentText = normalize(parent?.textContent);
-      if (parent && parent.children.length === 1 && parentText.length <= 120 && !link.querySelector("img")) {
-        parent.classList.add("imported-cta-wrap");
-        link.classList.add("imported-cta");
+    clone.querySelectorAll("img").forEach(image => {
+      const src = absolute(image.getAttribute("src") || "");
+      if (!src) { image.remove(); return; }
+      image.setAttribute("src", src);
+      image.setAttribute("loading", "lazy");
+      image.setAttribute("decoding", "async");
+      image.removeAttribute("width");
+      image.removeAttribute("height");
+    });
+
+    clone.querySelectorAll("video").forEach(video => {
+      const poster = absolute(video.getAttribute("poster") || "");
+      if (poster) video.setAttribute("poster", poster); else video.removeAttribute("poster");
+      video.setAttribute("controls", "");
+      video.setAttribute("preload", "metadata");
+      video.setAttribute("playsinline", "");
+      video.removeAttribute("autoplay");
+      video.removeAttribute("loop");
+      video.removeAttribute("muted");
+      video.removeAttribute("width");
+      video.removeAttribute("height");
+      video.querySelectorAll("source[src]").forEach(source => {
+        const src = absolute(source.getAttribute("src"));
+        if (src) source.setAttribute("src", src); else source.remove();
+      });
+    });
+
+    clone.querySelectorAll("section,div").forEach(node => {
+      const text = normalize(node.textContent);
+      const firstLabel = normalize(node.querySelector(":scope > h2, :scope > h3, :scope > h4, :scope > p, :scope > div")?.textContent);
+      const localLinks = [...node.querySelectorAll("a[href^='#']")].length;
+      if ((/^navigation$/i.test(firstLabel) || /^navigation\b/i.test(text)) && (localLinks >= 3 || node.querySelectorAll("a").length >= 4)) node.remove();
+    });
+
+    clone.querySelectorAll("h2,h3,h4,p,div,section").forEach(node => {
+      const text = normalize(node.textContent);
+      if (/^(table of contents|contents)$/i.test(text)) { node.remove(); return; }
+      if (/^disclosure\s*:/i.test(text) || /^review snapshot$/i.test(text)) { node.remove(); return; }
+    });
+
+    if (thumbnail) {
+      const firstMatchingHero = [...clone.querySelectorAll("img")]
+        .find(image => absolute(image.getAttribute("src")) === thumbnail);
+      const removable = firstMatchingHero?.closest("figure,picture");
+      if (removable) removable.remove(); else firstMatchingHero?.remove();
+    }
+
+    clone.querySelectorAll("section").forEach(section => {
+      section.classList.add("imported-section");
+      const children = [...section.children];
+      const headingIndex = children.findIndex(child => /^H[2-4]$/.test(child.tagName));
+      if (headingIndex > 0) {
+        const lead = children[0];
+        const leadText = normalize(lead.textContent);
+        if (leadText && leadText.length <= 45 && !lead.querySelector("img,video,table,ul,ol")) lead.classList.add("section-kicker");
       }
+    });
+
+    clone.querySelectorAll("details").forEach(details => {
+      details.classList.add("imported-faq");
+      const summary = details.querySelector(":scope > summary");
+      if (!summary) {
+        const generated = document.createElement("summary");
+        generated.textContent = "More details";
+        details.prepend(generated);
+      }
+    });
+
+    clone.querySelectorAll("figure").forEach(figure => figure.classList.add("imported-figure"));
+
+    clone.querySelectorAll("a[href]").forEach(link => {
       if (link.querySelector("img")) link.classList.add("content-media-link");
     });
 
-    clone.querySelectorAll("img").forEach(image => image.classList.add("content-media"));
-
-    clone.querySelectorAll("p, div, section").forEach(node => {
-      if (!normalize(node.textContent) && !node.querySelector("img, table, ul, ol, blockquote")) node.remove();
+    clone.querySelectorAll("img").forEach(image => {
+      image.classList.add("content-media");
+      if (!image.closest("figure") && !image.closest("a")) {
+        const figure = document.createElement("figure");
+        figure.className = "imported-figure";
+        image.replaceWith(figure);
+        figure.appendChild(image);
+      }
     });
+
+    clone.querySelectorAll("video,iframe,object,embed").forEach(media => {
+      media.classList.add("content-video");
+      if (!media.parentElement?.classList.contains("content-video-wrap")) {
+        const wrap = document.createElement("div");
+        wrap.className = "content-video-wrap";
+        media.replaceWith(wrap);
+        wrap.appendChild(media);
+      }
+    });
+
+    clone.querySelectorAll("table").forEach(table => {
+      if (table.parentElement?.classList.contains("table-scroll")) return;
+      const wrap = document.createElement("div");
+      wrap.className = "table-scroll";
+      table.replaceWith(wrap);
+      wrap.appendChild(table);
+    });
+
+    clone.querySelectorAll("pre").forEach(pre => {
+      if (pre.parentElement?.classList.contains("code-scroll")) return;
+      const wrap = document.createElement("div");
+      wrap.className = "code-scroll";
+      pre.replaceWith(wrap);
+      wrap.appendChild(pre);
+    });
+
+    canonicalizeClone(clone);
+
+    for (let pass = 0; pass < 4; pass += 1) {
+      clone.querySelectorAll("div,section").forEach(node => {
+        if (node.className || node.querySelector(":scope > h2, :scope > h3, :scope > h4") || directText(node)) return;
+        if (node.children.length === 1 && !node.querySelector(":scope > table, :scope > video, :scope > iframe, :scope > details")) unwrap(node);
+      });
+    }
+
+    clone.querySelectorAll("p,div,section,figure,blockquote").forEach(node => {
+      if (!normalize(node.textContent) && !node.querySelector("img,video,iframe,table,ul,ol,details,pre")) node.remove();
+    });
+
+    const known = new Set([
+      "P","H2","H3","H4","UL","OL","LI","A","IMG","FIGURE","FIGCAPTION","BLOCKQUOTE",
+      "TABLE","THEAD","TBODY","TFOOT","TR","TH","TD","DETAILS","SUMMARY","VIDEO","SOURCE",
+      "IFRAME","PRE","CODE","STRONG","EM","HR","BR","DIV","SECTION"
+    ]);
+    const unsupported = [...new Set([...clone.querySelectorAll("*")].map(node => node.tagName).filter(tag => !known.has(tag)))];
+    clone.querySelectorAll("*").forEach(node => {
+      if (!known.has(node.tagName)) unwrap(node);
+    });
+
+    const maxDepth = node => node.children.length
+      ? 1 + Math.max(...[...node.children].map(maxDepth))
+      : 1;
+    const orphanShortBlocks = [...clone.querySelectorAll("p,div")].filter(node => {
+      const value = normalize(node.textContent);
+      return value && value.length <= 70 && !node.className && !node.querySelector("a,img,video,iframe,table,ul,ol,h2,h3,h4,details,pre");
+    }).length;
+    const stats = {
+      words: normalize(clone.textContent).split(/\s+/).filter(Boolean).length,
+      headings: clone.querySelectorAll("h2,h3,h4").length,
+      images: clone.querySelectorAll("img").length,
+      videos: clone.querySelectorAll("video,iframe").length,
+      tables: clone.querySelectorAll("table").length,
+      faqs: clone.querySelectorAll("details").length,
+      ctas: clone.querySelectorAll("a.imported-cta").length,
+      mediaCards: clone.querySelectorAll(".media-card").length,
+      cardGroups: clone.querySelectorAll(".numbered-card-grid,.content-card-grid,.comparison-grid").length,
+      pricingGrids: clone.querySelectorAll(".pricing-grid").length,
+      catalogs: clone.querySelectorAll(".catalog-list").length,
+      directoryTrees: clone.querySelectorAll(".directory-tree").length,
+      orphanShortBlocks,
+      maxDepth: maxDepth(clone),
+      unsupported
+    };
+    const warnings = [];
+    if (stats.headings < 2) warnings.push("Very few semantic headings were detected.");
+    if (stats.maxDepth > 14) warnings.push("The imported DOM is unusually deeply nested.");
+    if (stats.videos > 6) warnings.push("The article contains many embedded videos; review mobile performance.");
+    if (stats.images > 30) warnings.push("The article contains many images; review page weight and spacing.");
+    if (stats.ctas > 8) warnings.push("Many repeated action links were detected; the front-end will deduplicate them.");
+    if (stats.orphanShortBlocks > 5) warnings.push("Several short unlabeled blocks remain and should be reviewed before automatic publishing.");
+    if (unsupported.length) warnings.push(`Unsupported elements were flattened: ${unsupported.join(", ")}.`);
 
     return {
       frameUrl: location.href,
@@ -291,7 +594,10 @@ async function inspectFrame(frame) {
       headings,
       paragraphs,
       images,
-      thumbnail
+      thumbnail,
+      warnings,
+      stats,
+      layoutVersion: "canonical-v3"
     };
   });
 }
@@ -404,6 +710,19 @@ async function extractPage(browser, targetUrl) {
       excerptFromText(candidate.paragraphs?.slice(0, 2).join(" ")) ||
       excerptFromText(candidate.text);
 
+    const layoutAudit = await validateCanonicalLayout(browser, candidate.html || "").catch(error => ({
+      warnings: [`Layout validation could not run: ${error instanceof Error ? error.message : String(error)}`],
+      measurements: {}
+    }));
+    const warnings = [...new Set([
+      ...(Array.isArray(candidate.warnings) ? candidate.warnings : []),
+      ...(layoutAudit.warnings || [])
+    ])];
+    const qualityScore = Math.max(0, 100
+      - warnings.length * 8
+      - (candidate.stats?.maxDepth > 14 ? 10 : 0)
+      - (candidate.words < 250 ? 12 : 0));
+
     return {
       status: "success",
       url: targetUrl,
@@ -415,6 +734,15 @@ async function extractPage(browser, targetUrl) {
       images: (candidate.images || []).map(image => image.url).filter(Boolean),
       wordCount: candidate.words,
       sourceFrameUrl: candidate.frameUrl,
+      layoutVersion: candidate.layoutVersion || "canonical-v3",
+      importQuality: {
+        score: qualityScore,
+        warnings,
+        stats: {
+          ...(candidate.stats || {}),
+          layoutAudit: layoutAudit.measurements || {}
+        }
+      },
       extractedAt: new Date().toISOString(),
       diagnostics: inspected.slice(0, 12).map(item => ({
         frameUrl: item.frameUrl,
@@ -422,6 +750,8 @@ async function extractPage(browser, targetUrl) {
         words: item.words,
         relevance: Number((item.relevance || 0).toFixed(3)),
         score: Number((item.score || 0).toFixed(1)),
+        warnings: item.warnings || [],
+        stats: item.stats || {},
         error: item.error || ""
       }))
     };
