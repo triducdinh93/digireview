@@ -8,6 +8,10 @@ on:
       - "style.css"
       - "content-normalizer.js"
       - "audit-content-layout.mjs"
+      - "audit-safe-flow-fixtures.mjs"
+      - "extract-google-sites.mjs"
+      - "admin.html"
+      - "index.html"
   workflow_dispatch:
 
 permissions:
@@ -37,6 +41,9 @@ jobs:
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+
+      - name: Audit safe-flow regression fixtures
+        run: npm run audit:fixtures
 
       - name: Audit all article layouts
         run: npm run audit:layout
