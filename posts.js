@@ -693,9 +693,9 @@ window.BLOG_DATA = {
       "excerpt": "I downloaded and reviewed all 50 AI Side Hustle Videos with Unrestricted PLR. Here is my honest hands-on experience with the bundle, video quality, and resale potential at $5.",
       "date": "2026-07-13",
       "updated": "2026-07-13",
-      "updatedAt": "2026-07-13T06:40:22.619Z",
+      "updatedAt": "2026-07-13T07:29:09.363Z",
       "publishedAt": "2026-07-13T06:19:59.759Z",
-      "featuredAt": "2026-07-13T06:40:22.619Z",
+      "featuredAt": "2026-07-13T07:29:09.363Z",
       "author": "Nesi",
       "primaryCategory": "Product Reviews",
       "categories": [
