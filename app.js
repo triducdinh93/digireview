@@ -19,6 +19,7 @@
     "Product Reviews": ["AI Tools", "Tools & Software", "WordPress", "Video Marketing", "SEO & Traffic", "PLR"],
     "Bonuses": ["Bonus Guides", "Templates & Resources", "Affiliate Bonuses"]
   };
+  const DEFAULT_PRIVACY_POLICY_HTML = '<p><strong>Last updated: July 13, 2026</strong></p>\n<p>This Privacy Policy explains how DigiReview collects, uses, stores and shares information when you visit this website, read an article, submit a comment, contact us or follow a link to a third-party website.</p>\n<h2>1. Information we collect</h2>\n<h3>Information you provide</h3>\n<p>We may collect information that you choose to submit, including your name, email address, message, comment and any other information you include in a form. Comment email addresses are used for moderation and administration and are not displayed publicly.</p>\n<h3>Usage and technical information</h3>\n<p>We use Google Analytics to understand how visitors use the website. Depending on your browser and settings, analytics information may include page views, referring pages, approximate location, device and browser information, interactions with website features and identifiers stored in first-party cookies such as <code>_ga</code>.</p>\n<p>This website is hosted through GitHub Pages. GitHub may process technical and security information, including visitor IP addresses and request information, when the website is accessed.</p>\n<h3>Browser storage</h3>\n<p>DigiReview uses browser local storage to remember settings and features such as theme preference, locally counted article views and article ratings. This information stays in your browser unless you clear your browser data.</p>\n<h2>2. How we use information</h2>\n<ul>\n  <li>To operate, maintain and improve DigiReview.</li>\n  <li>To understand website traffic and article performance.</li>\n  <li>To respond to contact requests and editorial feedback.</li>\n  <li>To publish and moderate comments and prevent spam or abuse.</li>\n  <li>To detect technical problems, fraud and security threats.</li>\n  <li>To comply with applicable legal obligations.</li>\n</ul>\n<h2>3. Cookies and similar technologies</h2>\n<p>Google Analytics may use first-party cookies to distinguish visitors and sessions. You can block or delete cookies through your browser settings. You can also use the Google Analytics opt-out browser add-on. Blocking cookies or local storage may affect some website features.</p>\n<h2>4. Third-party services</h2>\n<p>DigiReview may use or link to the following third-party services:</p>\n<ul>\n  <li><strong>Google Analytics</strong> for website measurement and usage analytics.</li>\n  <li><strong>GitHub Pages</strong> for website hosting and security logging.</li>\n  <li><strong>Supabase</strong> when the comment system is enabled, including storage and processing of comment submissions.</li>\n  <li><strong>Contact form providers</strong> if an external form endpoint is configured.</li>\n  <li><strong>Google Sites, product vendors and affiliate platforms</strong> when you open an original article source, product page or affiliate link.</li>\n</ul>\n<p>These providers process information under their own privacy policies and terms. DigiReview does not control the privacy practices of third-party websites.</p>\n<h2>5. Affiliate links</h2>\n<p>Some links on DigiReview may be affiliate links. If you click an affiliate link, the destination website or affiliate network may use cookies, referral identifiers or similar technologies to attribute a purchase or action. DigiReview may receive a commission at no additional cost to you.</p>\n<h2>6. How information is shared</h2>\n<p>We do not sell personal information. Information may be shared with service providers that support hosting, analytics, comments, form processing and website security; when you direct us to share it; or when disclosure is reasonably necessary to comply with law, protect rights, investigate abuse or secure the website.</p>\n<h2>7. Data retention</h2>\n<p>Contact messages and comments are retained only for as long as reasonably necessary for communication, moderation, recordkeeping and security. Analytics information is retained according to the settings and policies of Google Analytics. Local-storage information remains on your device until you clear it or your browser removes it.</p>\n<h2>8. Your choices and privacy rights</h2>\n<p>You may disable or delete cookies and local storage in your browser, use the Google Analytics opt-out browser add-on, or contact us to request access to, correction of or deletion of personal information that we control. Applicable rights may vary depending on where you live.</p>\n<h2>9. International processing</h2>\n<p>Service providers may process information in countries other than your own. Those countries may have different data-protection rules. We use services subject to their published privacy and security terms.</p>\n<h2>10. Children’s privacy</h2>\n<p>DigiReview is not directed to children under 13, and we do not knowingly collect personal information from children under 13. If you believe a child has submitted personal information, please contact us so it can be reviewed and removed.</p>\n<h2>11. Data security</h2>\n<p>We use reasonable technical and organizational safeguards, but no website or transmission method can be guaranteed to be completely secure.</p>\n<h2>12. External links</h2>\n<p>Articles may link to product pages, Google Sites, vendors, social networks and other external websites. Review the privacy policy of each external service before submitting information or making a purchase.</p>\n<h2>13. Changes to this policy</h2>\n<p>We may update this Privacy Policy when website features, service providers or legal requirements change. The updated date at the top of this page indicates the latest revision.</p>\n<h2>14. Contact</h2>\n<p>For privacy questions or requests, email <a href="mailto:dinhtrantriduc@gmail.com">dinhtrantriduc@gmail.com</a>.</p>';
   const primaryCategoryFor = (post) => {
     if (post.primaryCategory && CATEGORY_GROUPS[post.primaryCategory]) return post.primaryCategory;
     const categories = post.categories || [];
@@ -982,7 +983,6 @@
     const views = incrementView(post.slug);
     const related = relatedPosts(post);
     const cleanedArticleContent = sanitizeArticleHtml(post);
-    const tallImageWidth = Math.min(900, Math.max(280, Number(post.tallImageWidth || 520)));
     app.innerHTML = `
       <article class="article-shell">
         <div class="container">
@@ -999,7 +999,7 @@
               <img class="article-hero" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'">
               ${renderOriginalSource(post)}
               ${renderCta(post)}
-              <div class="article-content" id="article-content" style="--tall-image-width:${tallImageWidth}px">${cleanedArticleContent}</div>
+              <div class="article-content" id="article-content">${cleanedArticleContent}</div>
               ${renderProsCons(post)}
               ${renderCta(post)}
               <div class="tag-row">${(post.tags || []).map(tag => `<a href="#search=${encodeURIComponent(tag)}">#${escapeHtml(tag)}</a>`).join("")}</div>
@@ -1097,8 +1097,12 @@
   };
 
   const renderPage = (slug) => {
-    const page = pages[slug];
-    if (!page) return renderNotFound();
+    const storedPage = pages[slug];
+    if (!storedPage) return renderNotFound();
+    const isPrivacyPlaceholder = slug === "privacy" && /replace this sample policy|this template stores theme preference/i.test(String(storedPage.content || ""));
+    const page = isPrivacyPlaceholder
+      ? { title: "Privacy Policy", content: DEFAULT_PRIVACY_POLICY_HTML }
+      : storedPage;
     const pageHtml = renderRichContent(page.content, page.title, "");
     setPageTitle(page.title, articleText(pageHtml).slice(0, 155));
     updateJsonLd();

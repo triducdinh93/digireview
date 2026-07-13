@@ -724,33 +724,34 @@ html[data-theme="dark"] .primary-nav { background: rgba(13,23,18,.92); }
 .toc-sidebar-widget { display: none !important; }
 
 
-/* DigiReview V14: constrain oversized imported images inside content region */
+/* DigiReview V17: tall images fill the content column and crop excess length */
 .article-content figure.contains-tall-media,
 .article-content .content-media-link.contains-tall-media {
   display: block;
   width: 100%;
   max-width: 100%;
-  box-sizing: border-box;
-  margin: 30px 0;
-  padding: 16px;
+  height: clamp(520px, 68vh, 720px);
+  margin: 28px 0 34px;
+  padding: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--surface) 88%, #eef7f1);
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  box-shadow: 0 16px 38px rgba(19, 37, 27, .10);
 }
 .article-content .content-tall-media,
 .article-content .content-media-link img.content-tall-media {
   display: block;
   width: 100% !important;
   max-width: 100% !important;
-  height: min(78vh, 860px) !important;
-  max-height: min(78vh, 860px) !important;
-  object-fit: contain !important;
+  height: 100% !important;
+  max-height: none !important;
+  margin: 0 !important;
+  object-fit: cover !important;
   object-position: top center !important;
-  margin: 0 auto !important;
-  border-radius: 14px;
-  box-shadow: none;
+  border-radius: 16px;
   background: transparent;
+  box-shadow: none;
 }
 @media (max-width: 980px) {
   .toc-inline > ol { columns: 1; }
@@ -767,14 +768,12 @@ html[data-theme="dark"] .primary-nav { background: rgba(13,23,18,.92); }
   .toc-inline > ol { padding: 2px 18px 17px 40px; }
   .article-content figure.contains-tall-media,
   .article-content .content-media-link.contains-tall-media {
-    padding: 10px;
-    border-radius: 14px;
+    height: clamp(420px, 62vh, 560px);
+    border-radius: 12px;
   }
   .article-content .content-tall-media,
   .article-content .content-media-link img.content-tall-media {
-    height: min(62vh, 620px) !important;
-    max-height: min(62vh, 620px) !important;
-    border-radius: 10px;
+    border-radius: 12px;
   }
 }
 
