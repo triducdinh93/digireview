@@ -10,9 +10,22 @@
   const toast = document.getElementById("toast");
   const services = window.DIGIREVIEW_SERVICES || {};
   const NESI_AUTHOR = {
-    name: "Nesi",
-    avatar: "nesi-avatar.jpg",
-    bio: "I thoughtfully review digital products so you can understand what they offer, where their limits are, and whether they fit a real workflow. I aim to share clear, calm, and practical guidance, while encouraging every reader to verify current pricing and terms before making a decision."
+    name: site.author?.name || "Nesi",
+    avatar: site.author?.avatar || "nesi-avatar.jpg",
+    bio: site.author?.bio || "I thoughtfully review digital products so you can understand what they offer, where their limits are, and whether they fit a real workflow. I aim to share clear, calm, and practical guidance, while encouraging every reader to verify current pricing and terms before making a decision."
+  };
+  const CATEGORY_GROUPS = site.categoryGroups || {
+    "Tips & Guides": ["How To", "Affiliate Marketing", "Digital Marketing", "SEO"],
+    "Product Reviews": ["AI Tools", "Tools & Software", "WordPress", "Video Marketing", "SEO & Traffic", "PLR"],
+    "Bonuses": ["Bonus Guides", "Templates & Resources", "Affiliate Bonuses"]
+  };
+  const primaryCategoryFor = (post) => {
+    if (post.primaryCategory && CATEGORY_GROUPS[post.primaryCategory]) return post.primaryCategory;
+    const categories = post.categories || [];
+    for (const [group, children] of Object.entries(CATEGORY_GROUPS)) {
+      if (categories.includes(group) || categories.some(category => children.includes(category))) return group;
+    }
+    return categories[0] || "Articles";
   };
   let currentPage = 1;
 
@@ -161,7 +174,7 @@
     <article class="post-card">
       <a href="${postHref(post)}"${postTargetAttrs(post)}><img class="card-image" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" loading="lazy" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'"></a>
       <div class="card-body">
-        <span class="category-pill">${escapeHtml(post.categories?.[0] || "Article")}</span>
+        <span class="category-pill">${escapeHtml(primaryCategoryFor(post))}</span>
         <h3><a href="${postHref(post)}"${postTargetAttrs(post)}>${escapeHtml(post.title)}</a></h3>
         <p>${escapeHtml(post.excerpt)}</p>
         <div class="post-meta"><span>${formatDate(post.date)}</span><span>${postReadLabel(post)}</span></div>
@@ -177,12 +190,23 @@
 
   const categoryCounts = () => {
     const map = new Map();
-    posts.forEach(post => (post.categories || []).forEach(category => map.set(category, (map.get(category) || 0) + 1)));
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    posts.forEach(post => {
+      const values = new Set([primaryCategoryFor(post), ...(post.categories || [])]);
+      values.forEach(category => map.set(category, (map.get(category) || 0) + 1));
+    });
+    return map;
   };
 
-  const categoriesMarkup = () => categoryCounts().map(([category, count]) => `
-    <a href="#category=${encodeURIComponent(category)}"><span>${escapeHtml(category)}</span><strong>${count}</strong></a>`).join("");
+  const categoriesMarkup = () => {
+    const counts = categoryCounts();
+    return Object.entries(CATEGORY_GROUPS).map(([group, children]) => `
+      <div class="category-group-list">
+        <a class="category-parent" href="#category=${encodeURIComponent(group)}"><span>${escapeHtml(group)}</span><strong>${counts.get(group) || 0}</strong></a>
+        <div class="category-children">
+          ${children.filter(child => counts.get(child)).map(child => `<a href="#category=${encodeURIComponent(child)}"><span>${escapeHtml(child)}</span><strong>${counts.get(child) || 0}</strong></a>`).join("")}
+        </div>
+      </div>`).join("");
+  };
 
   const sidebarMarkup = () => `
     <aside class="sidebar" aria-label="Sidebar">
@@ -220,7 +244,7 @@
         <article class="featured-card main">
           <a href="${postHref(main)}"${postTargetAttrs(main)}><img class="card-image" src="${escapeHtml(main.image)}" alt="${escapeHtml(main.title)}" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'"></a>
           <div class="card-body">
-            <span class="category-pill">${escapeHtml(main.categories?.[0] || "Featured")}</span>
+            <span class="category-pill">${escapeHtml(primaryCategoryFor(main))}</span>
             <h2><a href="${postHref(main)}"${postTargetAttrs(main)}>${escapeHtml(main.title)}</a></h2>
             <p>${escapeHtml(main.excerpt)}</p>
             <div class="post-meta"><span>${formatDate(main.date)}</span><span>${postReadLabel(main)}</span></div>
@@ -231,7 +255,7 @@
             <article class="featured-card compact">
               <a href="${postHref(post)}"${postTargetAttrs(post)}><img class="card-image" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'"></a>
               <div class="card-body">
-                <span class="category-pill">${escapeHtml(post.categories?.[0] || "Featured")}</span>
+                <span class="category-pill">${escapeHtml(primaryCategoryFor(post))}</span>
                 <h3><a href="${postHref(post)}"${postTargetAttrs(post)}>${escapeHtml(post.title)}</a></h3>
                 <p>${escapeHtml(post.excerpt)}</p>
                 <div class="post-meta"><span>${formatDate(post.date)}</span></div>
@@ -262,7 +286,7 @@
     setPageTitle("", site.description);
     updateJsonLd();
     const latest = sortedPosts();
-    const categories = categoryCounts().slice(0, 7).map(([name]) => name);
+    const categories = Object.keys(CATEGORY_GROUPS);
     app.innerHTML = `
       ${noticeStripMarkup()}
       <section class="section section-first">
@@ -678,8 +702,7 @@
     const hostPath = url.replace(/^https?:\/\//i, "");
     const candidates = [
       `https://r.jina.ai/${url}`,
-      `https://r.jina.ai/http://${hostPath}`,
-      `https://s.jina.ai/?q=${encodeURIComponent(url)}`
+      `https://r.jina.ai/http://${hostPath}`
     ];
 
     let best = "";
@@ -732,7 +755,7 @@
       <section class="article-loading">
         <div class="container">
           <div class="loading-card">
-            <span class="category-pill">${escapeHtml(post.categories?.[0] || "Article")}</span>
+            <span class="category-pill">${escapeHtml(primaryCategoryFor(post))}</span>
             <h1>${escapeHtml(post.title)}</h1>
             <p>Loading the published Google Sites article inside DigiReview…</p>
             <div class="loading-bar"><span></span></div>
@@ -742,32 +765,108 @@
     scrollTop();
   };
 
+  const renderRichContent = (value, title = "", heroImage = "") => {
+    const source = String(value || "").trim();
+    if (!source) return "";
+    if (/<(?:p|h2|h3|ul|ol|table|div|section|main|figure|blockquote|img|a)\b/i.test(source)) return source;
+    return importedMarkdownToHtml(source, title, heroImage);
+  };
+
   const sanitizeArticleHtml = (post) => {
     const holder = document.createElement("div");
-    holder.innerHTML = String(post.content || "");
+    holder.innerHTML = renderRichContent(post.content, post.title, post.image);
 
-    [...holder.querySelectorAll("p, div")].forEach(element => {
-      const text = element.textContent.replace(/\\s+/g, " ").trim();
-      const links = [...element.querySelectorAll(":scope > a")];
-      const onlyDirectLink = links.length === 1 &&
-        [...element.children].every(child => child.tagName === "A");
+    const walker = document.createTreeWalker(holder, NodeFilter.SHOW_COMMENT);
+    const comments = [];
+    while (walker.nextNode()) comments.push(walker.currentNode);
+    comments.forEach(comment => comment.remove());
 
-      if (onlyDirectLink) {
-        const href = links[0].href || "";
-        const label = links[0].textContent.replace(/\\s+/g, " ").trim();
-        if (href === post.externalUrl ||
-            label.toLowerCase() === String(post.title || "").toLowerCase()) {
-          element.remove();
-          return;
-        }
-      }
+    holder.querySelectorAll("script,style,noscript,form,input,textarea,select,button,iframe").forEach(node => node.remove());
+    holder.querySelectorAll("main,article").forEach(node => node.classList.add("imported-root"));
 
-      if (/^disclosure\\s*:/i.test(text) || /^review snapshot$/i.test(text)) {
+    holder.querySelectorAll("h1").forEach(heading => {
+      if (heading.textContent.trim().toLowerCase() === String(post.title || "").trim().toLowerCase()) heading.remove();
+      else heading.outerHTML = `<h2>${heading.innerHTML}</h2>`;
+    });
+
+    holder.querySelectorAll("h2,h3,h4,p,div,section").forEach(element => {
+      const text = element.textContent.replace(/\s+/g, " ").trim();
+      if (!text && !element.querySelector("img,table,ul,ol,blockquote")) {
         element.remove();
+        return;
+      }
+      if (/^(table of contents|contents)$/i.test(text)) {
+        element.remove();
+        return;
+      }
+      if (/^disclosure\s*:/i.test(text) || /^review snapshot$/i.test(text)) {
+        element.remove();
+        return;
+      }
+      if (/^quick summary\s*:/i.test(text)) element.classList.add("imported-callout");
+      if (element.matches("div,section") && element.querySelector(":scope > h2, :scope > h3")) element.classList.add("imported-section");
+    });
+
+    holder.querySelectorAll("a[href]").forEach(link => {
+      const href = link.getAttribute("href") || "";
+      if (/^https?:/i.test(href)) {
+        link.target = "_blank";
+        link.rel = "noopener sponsored nofollow";
+      }
+      const parent = link.parentElement;
+      const parentText = parent?.textContent.replace(/\s+/g, " ").trim() || "";
+      if (parent && parent.children.length === 1 && parentText.length <= 120 && !link.querySelector("img")) {
+        parent.classList.add("imported-cta-wrap");
+        link.classList.add("imported-cta");
       }
     });
 
+    holder.querySelectorAll("img").forEach(image => {
+      image.loading = "lazy";
+      image.decoding = "async";
+      const label = `${image.alt || ""} ${image.src || ""}`;
+      if (/favicon|avatar|profile|small.?icon/i.test(label)) image.classList.add("content-icon");
+      else image.classList.add("content-media");
+      const link = image.closest("a");
+      if (link) link.classList.add("content-media-link");
+      if (!image.closest("figure") && !link) {
+        const figure = document.createElement("figure");
+        image.replaceWith(figure);
+        figure.appendChild(image);
+      }
+    });
+
+    holder.querySelectorAll("table").forEach(table => {
+      if (table.parentElement?.classList.contains("table-scroll")) return;
+      const wrap = document.createElement("div");
+      wrap.className = "table-scroll";
+      table.replaceWith(wrap);
+      wrap.appendChild(table);
+    });
+
+    holder.querySelectorAll("p,div").forEach(element => {
+      const links = [...element.querySelectorAll(":scope > a")];
+      const onlyDirectLink = links.length === 1 && [...element.children].every(child => child.tagName === "A");
+      if (!onlyDirectLink) return;
+      const href = links[0].href || "";
+      const label = links[0].textContent.replace(/\s+/g, " ").trim();
+      if (href === post.externalUrl || label.toLowerCase() === String(post.title || "").toLowerCase()) element.remove();
+    });
+
     return holder.innerHTML;
+  };
+
+  const prepareArticleMedia = () => {
+    document.querySelectorAll("#article-content img").forEach(image => {
+      const classify = () => {
+        if (image.naturalWidth && image.naturalHeight && image.naturalWidth <= 220 && image.naturalHeight <= 220) {
+          image.classList.remove("content-media");
+          image.classList.add("content-icon");
+        }
+      };
+      if (image.complete) classify();
+      else image.addEventListener("load", classify, { once: true });
+    });
   };
 
   const renderPost = async (post) => {
@@ -795,11 +894,11 @@
     app.innerHTML = `
       <article class="article-shell">
         <div class="container">
-          <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="#home">Home</a><span>›</span><a href="#category=${encodeURIComponent(post.categories?.[0] || "Articles")}">${escapeHtml(post.categories?.[0] || "Articles")}</a><span>›</span><span>${escapeHtml(post.title)}</span></nav>
+          <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="#home">Home</a><span>›</span><a href="#category=${encodeURIComponent(primaryCategoryFor(post))}">${escapeHtml(primaryCategoryFor(post))}</a><span>›</span><span>${escapeHtml(post.title)}</span></nav>
           <div class="article-layout">
             <div>
               <header class="article-header">
-                <span class="category-pill">${escapeHtml(post.categories?.[0] || "Review")}</span>
+                <span class="category-pill">${escapeHtml(primaryCategoryFor(post))}</span>
                 <h1>${escapeHtml(post.title)}</h1>
                 <p class="article-deck">${escapeHtml(post.excerpt)}</p>
                 <div class="post-meta"><span>By ${escapeHtml(NESI_AUTHOR.name)}</span><span>${formatDate(post.date)}</span><span>${postReadLabel(post)}</span><span>${views} local views</span></div>
@@ -815,16 +914,17 @@
               <section class="rating-box"><strong>Was this article helpful?</strong><div class="rating-stars" data-rating-slug="${escapeHtml(post.slug)}">${[1,2,3,4,5].map(star => `<button type="button" data-rating="${star}" aria-label="Rate ${star} out of 5">★</button>`).join("")}</div><small id="rating-message">Your rating is stored in this browser.</small></section>
               <section class="author-box"><img class="author-avatar" src="${escapeHtml(NESI_AUTHOR.avatar)}" alt="${escapeHtml(NESI_AUTHOR.name)}"><div><h2>About ${escapeHtml(NESI_AUTHOR.name)}</h2><p>${escapeHtml(NESI_AUTHOR.bio)}</p></div></section>
               <section class="comments-box"><h2>Comments</h2>${commentsMarkup(post)}</section>
-              ${related.length ? `<section class="section"><div class="section-heading"><div><h2>Related posts</h2></div></div><div class="related-grid">${related.map(item => `<a class="related-card" href="${postHref(item)}"${postTargetAttrs(item)}><img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'"><div><span class="category-pill">${escapeHtml(item.categories?.[0] || "Article")}</span><strong>${escapeHtml(item.title)}</strong></div></a>`).join("")}</div></section>` : ""}
+              ${related.length ? `<section class="section"><div class="section-heading"><div><h2>Related posts</h2></div></div><div class="related-grid">${related.map(item => `<a class="related-card" href="${postHref(item)}"${postTargetAttrs(item)}><img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.title)}" loading="lazy" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'"><div><span class="category-pill">${escapeHtml(primaryCategoryFor(item))}</span><strong>${escapeHtml(item.title)}</strong></div></a>`).join("")}</div></section>` : ""}
             </div>
             <aside class="article-sidebar">
               <section class="sidebar-widget"><h2>Share this article</h2><div class="share-row"><button type="button" data-share="copy">Copy link</button><a target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(location.href)}">Facebook</a><a target="_blank" rel="noopener" href="https://twitter.com/intent/tweet?url=${encodeURIComponent(location.href)}&text=${encodeURIComponent(post.title)}">X</a><a target="_blank" rel="noopener" href="https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(location.href)}">LinkedIn</a></div></section>
-              <section class="sidebar-widget"><h2>In this article</h2><div id="sticky-toc"></div></section>
+              <section class="sidebar-widget toc-sidebar-widget"><h2>In this article</h2><div id="sticky-toc"></div></section>
               <section class="sidebar-widget"><h2>Recent Posts</h2><div class="recent-list">${recentPostsMarkup()}</div></section>
             </aside>
           </div>
         </div>
       </article>`;
+    prepareArticleMedia();
     buildToc();
     bindDynamicEvents();
     bindRating(post.slug);
@@ -844,16 +944,21 @@
   const buildToc = () => {
     const content = document.getElementById("article-content");
     if (!content) return;
-    const headings = [...content.querySelectorAll("h2, h3")];
+    const headings = [...content.querySelectorAll("h2, h3")]
+      .filter(heading => !/^(table of contents|contents)$/i.test(heading.textContent.trim()));
     headings.forEach((heading, index) => {
       heading.id = heading.id || `${slugify(heading.textContent)}-${index + 1}`;
     });
-    const items = headings.map(heading => `<li class="${heading.tagName === "H3" ? "sub" : ""}"><a href="#${escapeHtml(heading.id)}">${escapeHtml(heading.textContent)}</a></li>`).join("");
-    const markup = headings.length ? `<nav class="toc" aria-label="Table of contents"><div class="toc-head"><h2>Table of Contents</h2><button type="button" data-toc-toggle>Hide</button></div><ol>${items}</ol></nav>` : "";
+
+    const list = headings.map(heading => `<li class="${heading.tagName === "H3" ? "sub" : ""}"><a href="#${escapeHtml(heading.id)}">${escapeHtml(heading.textContent)}</a></li>`).join("");
+    const inline = headings.length ? `<details class="toc toc-mobile"><summary>Table of Contents <span>${headings.length} sections</span></summary><ol>${list}</ol></details>` : "";
     const container = document.getElementById("toc-container");
-    if (container) container.innerHTML = markup;
+    if (container) container.innerHTML = inline;
+
     const sticky = document.getElementById("sticky-toc");
-    if (sticky) sticky.innerHTML = headings.length ? `<div class="category-list">${headings.filter(h => h.tagName === "H2").map(h => `<a href="#${escapeHtml(h.id)}"><span>${escapeHtml(h.textContent)}</span></a>`).join("")}</div>` : "<p>No sections found.</p>";
+    if (sticky) sticky.innerHTML = headings.length
+      ? `<nav class="toc-sidebar" aria-label="Table of contents"><ol>${list}</ol></nav>`
+      : "<p>No sections found.</p>";
   };
 
   const bindRating = (slug) => {
@@ -875,8 +980,14 @@
   const renderPage = (slug) => {
     const page = pages[slug];
     if (!page) return renderNotFound();
-    setPageTitle(page.title, String(page.content || "").replace(/<[^>]*>/g, " ").slice(0, 155));
+    const pageHtml = renderRichContent(page.content, page.title, "");
+    setPageTitle(page.title, articleText(pageHtml).slice(0, 155));
     updateJsonLd();
+    const contactDestination = site.contactEndpoint
+      ? "Messages are submitted through the configured form service."
+      : site.contactEmail
+        ? `Messages will open in your email app and be addressed to ${escapeHtml(site.contactEmail)}.`
+        : "The contact destination has not been configured yet.";
     const contactForm = slug === "contact" ? `
       <form class="contact-form" id="contact-form">
         <label>Name<input name="name" required></label>
@@ -884,8 +995,10 @@
         <label>Subject<input name="subject" required></label>
         <label>Message<textarea name="message" rows="7" required></textarea></label>
         <button type="submit">Send message</button>
+        <p class="form-destination">${contactDestination}</p>
       </form>` : "";
-    app.innerHTML = `<section class="page-shell"><div class="container page-content"><span class="eyebrow">DigiReview Journal</span><h1>${escapeHtml(page.title)}</h1><div class="article-content">${page.content || ""}</div>${contactForm}</div></section>`;
+    app.innerHTML = `<section class="page-shell"><div class="container page-content"><span class="eyebrow">DigiReview Journal</span><h1>${escapeHtml(page.title)}</h1><div class="article-content static-page-content">${pageHtml}</div>${contactForm}</div></section>`;
+    prepareArticleMedia();
     bindDynamicEvents();
     scrollTop();
   };
@@ -947,16 +1060,33 @@
   const handleContact = async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
-    if (!site.contactEndpoint) {
-      showToast("Add your contact form endpoint in posts.js.");
+    const values = Object.fromEntries(new FormData(form).entries());
+
+    if (site.contactEndpoint) {
+      try {
+        const response = await fetch(site.contactEndpoint, {
+          method: "POST",
+          body: new FormData(form),
+          headers: { Accept: "application/json" }
+        });
+        if (!response.ok) throw new Error("Contact request failed");
+        form.reset();
+        showToast("Message sent.");
+      } catch (_) {
+        showToast("Could not send. Check the configured form endpoint.");
+      }
       return;
     }
-    try {
-      const response = await fetch(site.contactEndpoint, { method: "POST", body: new FormData(form), headers: { Accept: "application/json" } });
-      if (!response.ok) throw new Error("Contact request failed");
-      form.reset();
-      showToast("Message sent.");
-    } catch (_) { showToast("Could not send. Check the configured endpoint."); }
+
+    if (site.contactEmail) {
+      const subject = encodeURIComponent(String(values.subject || "DigiReview contact"));
+      const body = encodeURIComponent(`Name: ${values.name || ""}\nEmail: ${values.email || ""}\n\n${values.message || ""}`);
+      location.href = `mailto:${encodeURIComponent(site.contactEmail)}?subject=${subject}&body=${body}`;
+      showToast("Opening your email app.");
+      return;
+    }
+
+    showToast("Contact destination is not configured. Add it in admin → Site settings.");
   };
 
   const route = async () => {
@@ -996,7 +1126,7 @@
     const q = query.trim().toLowerCase();
     if (!q) { target.innerHTML = ""; return; }
     const results = sortedPosts().filter(post => [post.title, post.excerpt, ...(post.categories || []), ...(post.tags || [])].join(" ").toLowerCase().includes(q)).slice(0, 6);
-    target.innerHTML = results.length ? results.map(post => `<a class="live-result" href="${postHref(post)}"${postTargetAttrs(post)}><img src="${escapeHtml(post.image)}" alt=""><span><strong>${escapeHtml(post.title)}</strong><span>${escapeHtml(post.categories?.[0] || "Article")}</span></span></a>`).join("") : `<p>No matching articles.</p>`;
+    target.innerHTML = results.length ? results.map(post => `<a class="live-result" href="${postHref(post)}"${postTargetAttrs(post)}><img src="${escapeHtml(post.image)}" alt=""><span><strong>${escapeHtml(post.title)}</strong><span>${escapeHtml(primaryCategoryFor(post))}</span></span></a>`).join("") : `<p>No matching articles.</p>`;
   };
 
   const scrollTop = () => window.scrollTo({ top: 0, behavior: "auto" });

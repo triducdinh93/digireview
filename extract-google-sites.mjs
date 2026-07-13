@@ -245,10 +245,40 @@ async function inspectFrame(frame) {
       firstMatchingHero?.closest("figure, picture, div")?.remove?.() || firstMatchingHero?.remove();
     }
 
-    clone.querySelectorAll("p, div, section").forEach(node => {
-      if (!normalize(node.textContent) && !node.querySelector("img, table, ul, ol, blockquote")) {
+    const commentWalker = document.createTreeWalker(clone, NodeFilter.SHOW_COMMENT);
+    const comments = [];
+    while (commentWalker.nextNode()) comments.push(commentWalker.currentNode);
+    comments.forEach(comment => comment.remove());
+
+    clone.querySelectorAll("h1").forEach(heading => {
+      if (normalize(heading.textContent).toLowerCase() === title.toLowerCase()) heading.remove();
+      else heading.outerHTML = `<h2>${heading.innerHTML}</h2>`;
+    });
+
+    clone.querySelectorAll("h2,h3,p,div,section").forEach(node => {
+      const value = normalize(node.textContent);
+      if (/^(table of contents|contents)$/i.test(value)) {
         node.remove();
+        return;
       }
+      if (/^quick summary\s*:/i.test(value)) node.classList.add("imported-callout");
+      if (node.matches("div,section") && node.querySelector(":scope > h2, :scope > h3")) node.classList.add("imported-section");
+    });
+
+    clone.querySelectorAll("a[href]").forEach(link => {
+      const parent = link.parentElement;
+      const parentText = normalize(parent?.textContent);
+      if (parent && parent.children.length === 1 && parentText.length <= 120 && !link.querySelector("img")) {
+        parent.classList.add("imported-cta-wrap");
+        link.classList.add("imported-cta");
+      }
+      if (link.querySelector("img")) link.classList.add("content-media-link");
+    });
+
+    clone.querySelectorAll("img").forEach(image => image.classList.add("content-media"));
+
+    clone.querySelectorAll("p, div, section").forEach(node => {
+      if (!normalize(node.textContent) && !node.querySelector("img, table, ul, ol, blockquote")) node.remove();
     });
 
     return {
@@ -428,46 +458,78 @@ async function cleanupOldResults(days = 14) {
   }
 }
 
+async function mapLimit(values, limit, worker) {
+  const results = new Array(values.length);
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, values.length) }, async () => {
+    while (cursor < values.length) {
+      const index = cursor++;
+      try { results[index] = await worker(values[index], index); }
+      catch (error) {
+        results[index] = {
+          status: "error",
+          url: values[index],
+          error: error instanceof Error ? error.message : String(error),
+          finishedAt: new Date().toISOString()
+        };
+      }
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 async function main() {
   await ensureDirectories();
   const requestFiles = await listRequests();
-
   if (!requestFiles.length) {
     console.log("No pending Auto-fill requests.");
     return;
   }
 
   const browser = await chromium.launch({ headless: true });
-
   try {
     for (const fileName of requestFiles) {
       const filePath = path.join(REQUESTS_DIR, fileName);
       let request = null;
-
       try {
         request = JSON.parse(await fs.readFile(filePath, "utf8"));
-        if (!request.requestId || !/^https:\/\/sites\.google\.com\/view\//i.test(request.url || "")) {
-          throw new Error("Invalid request file.");
-        }
+        const urls = Array.isArray(request.urls) ? request.urls : [request.url];
+        const validUrls = [...new Set(urls.map(value => String(value || "").trim()))]
+          .filter(url => /^https:\/\/sites\.google\.com\/view\//i.test(url));
+        if (!request.requestId || !validUrls.length) throw new Error("Invalid request file.");
+        if (validUrls.length > 50) throw new Error("A batch can contain at most 50 URLs.");
 
-        console.log(`Extracting ${request.url}`);
-        const result = await extractPage(browser, request.url);
-        result.requestId = request.requestId;
+        console.log(`Processing ${validUrls.length} Google Sites page(s)`);
+        const items = await mapLimit(validUrls, 2, async url => {
+          console.log(`Extracting ${url}`);
+          const result = await extractPage(browser, url);
+          console.log(`Completed ${url}: ${result.wordCount} words`);
+          return result;
+        });
+
+        const succeeded = items.filter(item => item.status === "success").length;
+        const result = validUrls.length === 1
+          ? { ...items[0], requestId: request.requestId }
+          : {
+              status: succeeded ? "success" : "error",
+              requestId: request.requestId,
+              mode: "batch",
+              total: items.length,
+              succeeded,
+              failed: items.length - succeeded,
+              items,
+              extractedAt: new Date().toISOString()
+            };
         await writeResult(request.requestId, result);
-        console.log(`Completed ${request.requestId}: ${result.wordCount} words`);
       } catch (error) {
-        const requestId =
-          request?.requestId ||
-          path.basename(fileName, ".json");
-
+        const requestId = request?.requestId || path.basename(fileName, ".json");
         await writeResult(requestId, {
           status: "error",
           requestId,
-          url: request?.url || "",
           error: error instanceof Error ? error.message : String(error),
           finishedAt: new Date().toISOString()
         });
-
         console.error(`Failed ${requestId}:`, error);
       } finally {
         await fs.unlink(filePath).catch(() => {});
@@ -476,7 +538,6 @@ async function main() {
   } finally {
     await browser.close();
   }
-
   await cleanupOldResults();
 }
 
