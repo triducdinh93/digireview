@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script src="services-config.js?v=7.0.0"></script>
+  <script src="services-config.js?v=10.0.0"></script>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-M4Y6KM52WG"></script>
 <script>
@@ -29,6 +29,9 @@
     .preview{border:1px solid var(--line);border-radius:18px;background:#fff;overflow:hidden}.preview-top{padding:18px 18px 0}.badge{display:inline-flex;padding:6px 10px;border-radius:999px;background:#e5f7ed;color:var(--primary);font-size:11px;font-weight:900;text-transform:uppercase}.preview h3{font-size:28px;line-height:1.15;margin:12px 0}.preview p{color:var(--muted)}
     .preview-img{width:100%;aspect-ratio:16/8;object-fit:cover;background:#edf5f0;margin-top:16px}.preview-footer{padding:18px;display:flex;justify-content:space-between;gap:12px;align-items:center}.preview-link{display:inline-flex;padding:11px 14px;border-radius:12px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;font-weight:800;text-decoration:none}
     .muted{color:var(--muted)}.divider{height:1px;background:var(--line);margin:16px 0}.import-note{padding:10px 12px;border-radius:12px;background:#f6fbf8;border:1px dashed var(--line);font-size:12px;color:var(--muted)}
+    .autofill-progress{height:7px;margin-top:10px;overflow:hidden;border-radius:999px;background:#dfeee5}
+    .autofill-progress span{display:block;width:34%;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--primary),#75d9a8);animation:autofill-move 1.15s ease-in-out infinite alternate}
+    @keyframes autofill-move{from{transform:translateX(-20%)}to{transform:translateX(230%)}}
     @media(max-width:980px){.layout{grid-template-columns:1fr}.category-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:720px){.top{flex-direction:column}.form-grid,.category-grid,.url-row{grid-template-columns:1fr}}
   </style>
 </head>
@@ -37,7 +40,7 @@
   <div class="top">
     <div class="title">
       <h1>DigiReview Quick Publisher</h1>
-      <p>Dán URL Google Sites để tự lấy tiêu đề, mô tả, chuyên mục và thumbnail. Bạn vẫn có thể chỉnh lại trước khi nhấn <strong>Save post</strong>.</p>
+      <p>Dán URL Google Sites. GitHub Actions sẽ mở trang bằng Chromium thật, đọc nội dung nhúng rồi tự điền tiêu đề, mô tả, chuyên mục, ảnh và nội dung bài.</p>
     </div>
     <div class="actions">
       <button id="new-post" type="button">New post</button>
@@ -80,7 +83,7 @@
             <input name="externalUrl" placeholder="https://sites.google.com/view/..." required>
             <button id="auto-import" type="button">Auto-fill</button>
           </div>
-          <span class="hint">Khi dán URL, hệ thống sẽ tự thử đọc trang. Trang Google Sites phải được Publish công khai.</span>
+          <span class="hint">Trang phải được Publish công khai. Auto-fill thường mất khoảng 30 giây đến 3 phút vì GitHub cần khởi động Chromium.</span>
         </label>
 
         <label class="full">Title<input name="title" required></label>
@@ -107,7 +110,10 @@
           <div class="category-grid" id="category-grid"></div>
         </div>
 
-        <div class="full import-note">Auto-fill uses Jina Reader to read the public Google Sites page. The result is best-effort, so review the title, excerpt, categories and thumbnail before saving.</div>
+        <div class="full import-note">
+          Auto-fill uses GitHub Actions + Playwright. Bạn có thể đóng hoặc tải lại admin trong lúc chờ; hệ thống sẽ tự tiếp tục kiểm tra yêu cầu gần nhất.
+          <div class="autofill-progress" id="autofill-progress" hidden><span></span></div>
+        </div>
 
         <div class="full actions">
           <button type="submit">Save post</button>
@@ -485,17 +491,22 @@
     return score;
   }
 
-  function isLoadableImage(url, timeout = 9000) {
+  function isLoadableImage(url, timeout = 2500) {
     return new Promise(resolve => {
       const image = new Image();
-      const timer = window.setTimeout(() => resolve(false), timeout);
+      const timer = window.setTimeout(() => resolve({ url, ok: false, area: 0 }), timeout);
       image.onload = () => {
         window.clearTimeout(timer);
-        resolve(image.naturalWidth >= 500 && image.naturalHeight >= 250);
+        const area = image.naturalWidth * image.naturalHeight;
+        resolve({
+          url,
+          ok: image.naturalWidth >= 500 && image.naturalHeight >= 250,
+          area
+        });
       };
       image.onerror = () => {
         window.clearTimeout(timer);
-        resolve(false);
+        resolve({ url, ok: false, area: 0 });
       };
       image.referrerPolicy = "no-referrer";
       image.src = url;
@@ -503,10 +514,12 @@
   }
 
   async function chooseThumbnail(candidates) {
-    for (const candidate of candidates.slice(0, 25)) {
-      if (await isLoadableImage(candidate)) return candidate;
-    }
-    return "";
+    const shortlist = [...new Set(candidates)].slice(0, 6);
+    if (!shortlist.length) return "";
+    const results = await Promise.all(shortlist.map(url => isLoadableImage(url)));
+    return results
+      .filter(item => item.ok)
+      .sort((a, b) => b.area - a.area)[0]?.url || "";
   }
 
   function parseReaderOutput(output, metadata = {}) {
@@ -540,116 +553,230 @@
     };
   }
 
-  async function fetchGoogleSiteSource(url) {
-    const configuredEndpoint = String(window.DIGIREVIEW_SERVICES?.extractorEndpoint || "").trim();
+  const githubHeaders = (token, includeJson = false) => ({
+    "Accept": "application/vnd.github+json",
+    "Authorization": `Bearer ${token}`,
+    "X-GitHub-Api-Version": "2022-11-28",
+    ...(includeJson ? { "Content-Type": "application/json" } : {})
+  });
 
-    if (configuredEndpoint) {
-      try {
-        const response = await fetch(configuredEndpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Accept": "application/json" },
-          body: JSON.stringify({ url })
-        });
-        if (response.ok) {
-          const payload = await response.json();
-          if (String(payload.markdown || "").trim().length > 300) {
-            return { markdown: payload.markdown, htmlSource: payload.html || "", metadata: payload.metadata || {} };
-          }
-        }
-      } catch (error) {
-        console.warn("Configured extractor failed.", error);
-      }
+  const decodeBase64Utf8 = value => {
+    const binary = atob(String(value || "").replace(/\s+/g, ""));
+    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  };
+
+  async function createAutofillRequest(url) {
+    const config = ghConfig();
+    if (!(config.owner && config.repo && config.branch && config.token)) {
+      throw new Error("Please complete GitHub publishing settings first.");
     }
 
-    const hostPath = url.replace(/^https?:\/\//i, "");
-    const candidates = [
-      `https://r.jina.ai/${url}`,
-      `https://r.jina.ai/http://${hostPath}`,
-      `https://s.jina.ai/?q=${encodeURIComponent(url)}`
-    ];
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const path = `autofill/requests/${requestId}.json`;
+    const endpoint = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${path}`;
+    const requestData = {
+      requestId,
+      url,
+      requestedAt: new Date().toISOString(),
+      requestedBy: "DigiReview Quick Publisher"
+    };
 
-    let best = "";
-    for (const candidate of candidates) {
-      try {
-        const response = await fetch(candidate, {
-          method: "GET",
-          headers: { "Accept": "text/plain" },
-          cache: "no-store"
-        });
-        if (!response.ok) continue;
-        const text = await response.text();
-        if (text.length > best.length) best = text;
-        if (stripMarkdown(text).split(/\s+/).length > 180) break;
-      } catch (error) {
-        console.warn("Reader candidate failed:", candidate, error);
-      }
+    const response = await fetch(endpoint, {
+      method: "PUT",
+      headers: githubHeaders(config.token, true),
+      body: JSON.stringify({
+        message: `Request Google Sites auto-fill: ${requestId}`,
+        content: toBase64(JSON.stringify(requestData, null, 2)),
+        branch: config.branch
+      })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.message || `GitHub request creation failed: HTTP ${response.status}`);
     }
 
-    if (stripMarkdown(best).split(/\s+/).length < 45) {
-      throw new Error("The page could not be extracted in the browser. Deploy the included Supabase extractor and enter its endpoint in services-config.js.");
-    }
-    return { markdown: best, htmlSource: "", metadata: {} };
+    const pending = {
+      requestId,
+      url,
+      owner: config.owner,
+      repo: config.repo,
+      branch: config.branch,
+      createdAt: Date.now()
+    };
+    localStorage.setItem("digireview-autofill-pending", JSON.stringify(pending));
+    return pending;
   }
 
-  async function autoFillFromGoogleSites() {
+  async function getAutofillResult(pending) {
+    const config = ghConfig();
+    const path = `autofill/results/${pending.requestId}.json`;
+    const endpoint =
+      `https://api.github.com/repos/${pending.owner}/${pending.repo}/contents/${path}` +
+      `?ref=${encodeURIComponent(pending.branch)}`;
+
+    const response = await fetch(endpoint, {
+      headers: githubHeaders(config.token),
+      cache: "no-store"
+    });
+
+    if (response.status === 404) return null;
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.message || `Could not read the GitHub Actions result: HTTP ${response.status}`);
+    }
+
+    const text = decodeBase64Utf8(payload.content || "");
+    return JSON.parse(text);
+  }
+
+  function sleep(milliseconds) {
+    return new Promise(resolve => window.setTimeout(resolve, milliseconds));
+  }
+
+  let autofillInProgress = false;
+
+  async function waitForAutofillResult(pending) {
+    const progress = document.getElementById("autofill-progress");
+    const started = Date.now();
+    const maximumWait = 6 * 60 * 1000;
+    let checks = 0;
+
+    progress.hidden = false;
+    autoImportButton.disabled = true;
+    autoImportButton.textContent = "Waiting…";
+
+    try {
+      while (Date.now() - started < maximumWait) {
+        checks += 1;
+        const elapsedSeconds = Math.floor((Date.now() - started) / 1000);
+        status.textContent =
+          `GitHub Actions is rendering the page with Chromium… ${elapsedSeconds}s elapsed.\n` +
+          `Request: ${pending.requestId}`;
+
+        const result = await getAutofillResult(pending);
+        if (result) {
+          localStorage.removeItem("digireview-autofill-pending");
+          return result;
+        }
+
+        await sleep(checks < 4 ? 4000 : 7000);
+      }
+
+      throw new Error(
+        "The workflow has not returned a result after 6 minutes. Open the repository Actions tab to inspect the run, then reload admin.html to resume checking."
+      );
+    } finally {
+      progress.hidden = true;
+      autoImportButton.disabled = false;
+      autoImportButton.textContent = "Auto-fill";
+    }
+  }
+
+  function normalizeComparableTitle(value) {
+    return stripMarkdown(value)
+      .toLowerCase()
+      .replace(/\b(review|official|home|google sites?|google workspace)\b/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function expectedTitleFromUrl(url) {
+    try {
+      const lastSegment = new URL(url).pathname.split("/").filter(Boolean).pop() || "";
+      return normalizeComparableTitle(decodeURIComponent(lastSegment).replace(/-/g, " "));
+    } catch {
+      return "";
+    }
+  }
+
+  function titleLooksRelevant(title, url) {
+    const actual = normalizeComparableTitle(title);
+    const expected = expectedTitleFromUrl(url);
+    if (!actual || !expected) return false;
+
+    const expectedWords = expected.split(" ").filter(word => word.length >= 3);
+    const actualWords = new Set(actual.split(" "));
+    const matches = expectedWords.filter(word => actualWords.has(word)).length;
+    return matches >= Math.max(1, Math.ceil(expectedWords.length * 0.45));
+  }
+
+  function applyAutofillResult(result, requestedUrl) {
+    if (result.status !== "success") {
+      const details = result.error || result.message || "The workflow could not extract this page.";
+      throw new Error(details);
+    }
+
+    const title = String(result.title || "").trim();
+    const excerpt = String(result.excerpt || "").trim();
+    const html = String(result.html || "").trim();
+    const thumbnail = String(result.thumbnail || "").trim();
+    const articleWords = Number(result.wordCount || stripMarkdown(html).split(/\s+/).filter(Boolean).length);
+
+    if (!titleLooksRelevant(title, requestedUrl)) {
+      throw new Error(
+        `The extracted title "${title || "unknown"}" does not match the Google Sites URL. No incorrect data was inserted.`
+      );
+    }
+    if (excerpt.length < 35) {
+      throw new Error("The workflow found the page but did not return enough text for an excerpt.");
+    }
+    if (articleWords < 45 || !html) {
+      throw new Error("The workflow found only the Google Sites shell, not the complete embedded article.");
+    }
+
+    form.elements.title.value = title;
+    form.elements.slug.value = slugify(title);
+    form.elements.excerpt.value = excerpt;
+    form.elements.date.value = new Date().toISOString().slice(0, 10);
+    form.elements.content.value = html;
+
+    const categoryText = `${title}\n${excerpt}\n${stripMarkdown(html)}`;
+    setSelectedCategories(inferCategories(categoryText));
+
+    if (thumbnail) form.elements.image.value = thumbnail;
+
+    renderPreview();
+    status.textContent =
+      `Auto-fill complete. Imported approximately ${articleWords} words` +
+      `${thumbnail ? " and selected a product image" : ""}.\n` +
+      `Source frame: ${result.sourceFrameUrl || "Google Sites page"}`;
+  }
+
+  async function autoFillFromGoogleSites({ resumePending = false } = {}) {
+    if (autofillInProgress) return;
+
     const url = form.elements.externalUrl.value.trim();
-    if (!/^https:\/\/sites\.google\.com\//i.test(url)) {
+    if (!resumePending && !/^https:\/\/sites\.google\.com\//i.test(url)) {
       status.textContent = "Please paste a published Google Sites URL first.";
       return;
     }
 
-    autoImportButton.disabled = true;
-    autoImportButton.textContent = "Reading…";
-    status.textContent = "Reading the Google Sites page and extracting its article content…";
+    autofillInProgress = true;
 
     try {
-      const result = await fetchGoogleSiteSource(url);
-      const metadata = parseReaderOutput(result.markdown, result.metadata || {});
+      let pending = null;
 
-      if (!metadata.title && !metadata.excerpt) {
-        throw new Error("The extractor reached the page but did not return readable article text.");
-      }
-
-      if (metadata.title) {
-        form.elements.title.value = metadata.title;
-        form.elements.slug.value = slugify(metadata.title);
-      }
-      if (metadata.excerpt) {
-        form.elements.excerpt.value = metadata.excerpt;
+      if (resumePending) {
+        pending = JSON.parse(localStorage.getItem("digireview-autofill-pending") || "null");
+        if (!pending) return;
+        form.elements.externalUrl.value = pending.url;
+        status.textContent = `Resuming Auto-fill request ${pending.requestId}…`;
       } else {
-        const fallbackExcerpt = toExcerpt(stripMarkdown(metadata.content));
-        if (fallbackExcerpt) form.elements.excerpt.value = fallbackExcerpt;
+        saveGhConfig();
+        status.textContent = "Creating a GitHub Actions extraction request…";
+        pending = await createAutofillRequest(url);
       }
 
-      form.elements.date.value = new Date().toISOString().slice(0,10);
-      setSelectedCategories(metadata.categories);
-
-      const candidates = extractImageCandidates(
-        result.markdown,
-        result.htmlSource,
-        JSON.stringify(result.metadata || {})
-      );
-      const thumbnail = await chooseThumbnail(candidates);
-      if (thumbnail) form.elements.image.value = thumbnail;
-
-      const articleHtml = markdownToArticleHtml(
-        metadata.content,
-        metadata.title,
-        thumbnail
-      );
-      if (stripMarkdown(articleHtml).split(/\s+/).length < 45) {
-        throw new Error("Only a short link block was returned instead of the full article.");
-      }
-      form.elements.content.value = articleHtml;
-
-      renderPreview();
-      const wordCount = stripMarkdown(articleHtml).split(/\s+/).filter(Boolean).length;
-      status.textContent = `Auto-fill complete. Imported approximately ${wordCount} words${thumbnail ? " and selected a large product image" : ""}. Review the fields, then click Save post.`;
+      const result = await waitForAutofillResult(pending);
+      applyAutofillResult(result, pending.url);
     } catch (error) {
       status.textContent = "Auto-fill failed: " + error.message;
     } finally {
-      autoImportButton.disabled = false;
-      autoImportButton.textContent = "Auto-fill";
+      autofillInProgress = false;
     }
   }
 
@@ -734,7 +861,7 @@
 
     localStorage.setItem("digireview-admin-data", JSON.stringify(data));
     localStorage.setItem("digireview-admin-dirty", "false");
-    status.textContent = "Published successfully. The homepage now reads the newest posts directly from GitHub and will refresh automatically.";
+    status.textContent = "Published successfully. New page loads will receive the updated post without refreshing visitors who are already reading.";
     return true;
   }
 
@@ -790,16 +917,10 @@
       if (/^https:\/\/sites\.google\.com\//i.test(form.elements.externalUrl.value.trim())) {
         autoFillFromGoogleSites();
       }
-    }, 150);
+    }, 650);
   });
 
-  form.elements.externalUrl.addEventListener("change", () => {
-    if (/^https:\/\/sites\.google\.com\//i.test(form.elements.externalUrl.value.trim())) {
-      autoFillFromGoogleSites();
-    }
-  });
-
-  autoImportButton.addEventListener("click", autoFillFromGoogleSites);
+  autoImportButton.addEventListener("click", () => autoFillFromGoogleSites());
 
   document.getElementById("save-local-only").addEventListener("click", () => savePost({ publish: false }));
 
@@ -913,6 +1034,13 @@
   renderList();
   if (selected()) fill(selected());
   status.textContent = "Ready. Paste a published Google Sites URL to auto-fill the post.";
+
+  const pendingAutofill = JSON.parse(localStorage.getItem("digireview-autofill-pending") || "null");
+  if (pendingAutofill && Date.now() - Number(pendingAutofill.createdAt || 0) < 20 * 60 * 1000) {
+    autoFillFromGoogleSites({ resumePending: true });
+  } else if (pendingAutofill) {
+    localStorage.removeItem("digireview-autofill-pending");
+  }
 })();
 </script>
 </body>

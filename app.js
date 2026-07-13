@@ -1122,43 +1122,11 @@
 
   };
 
-  const currentPostsSignature = () => JSON.stringify(
-    (window.BLOG_DATA?.posts || []).map(post => [
-      post.id, post.slug, post.updatedAt, post.publishedAt, post.featuredAt, post.featured
-    ])
-  );
-
-  const checkForPostUpdates = async () => {
-    const repository = window.BLOG_REPOSITORY;
-    if (!repository?.owner || !repository?.repo) return;
-    try {
-      const url = `https://raw.githubusercontent.com/${repository.owner}/${repository.repo}/${repository.branch || "main"}/posts.js?v=${Date.now()}`;
-      const response = await fetch(url, { cache: "no-store" });
-      if (!response.ok) return;
-      const source = await response.text();
-      const sandbox = {};
-      Function("window", source)(sandbox);
-      const nextSignature = JSON.stringify(
-        (sandbox.BLOG_DATA?.posts || []).map(post => [
-          post.id, post.slug, post.updatedAt, post.publishedAt, post.featuredAt, post.featured
-        ])
-      );
-      if (nextSignature && nextSignature !== currentPostsSignature()) {
-        location.reload();
-      }
-    } catch (error) {
-      console.debug("Post refresh check skipped", error);
-    }
-  };
-
+  // Do not automatically reload pages that visitors are currently reading.
+  // Fresh posts are fetched with cache-busting the next time a page is opened.
   const startApp = () => {
     initChrome();
     route().catch(error => console.error("Initial route failed", error));
-    window.setInterval(checkForPostUpdates, 45000);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") checkForPostUpdates();
-    });
-    window.addEventListener("focus", checkForPostUpdates);
   };
 
   window.addEventListener("hashchange", () => route().catch(error => console.error("Route failed", error)));
