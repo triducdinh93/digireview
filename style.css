@@ -1485,3 +1485,143 @@ html, body {
   .article-content .value-amount { font-size: 16px; }
   .article-content .directory-tree { font-size: 12px; padding: 14px; }
 }
+
+/* DigiReview V21 — structural compiler output. These rules intentionally override legacy import styles. */
+.dr-canonical-root {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+.dr-canonical-root > :first-child { margin-top: 0; }
+.dr-canonical-root > :last-child { margin-bottom: 0; }
+
+.article-content [data-dr-component$="grid"],
+.article-content .content-card-grid,
+.article-content .numbered-card-grid,
+.article-content .comparison-grid,
+.article-content .pricing-grid {
+  align-items: stretch;
+  grid-auto-rows: 1fr;
+}
+
+.article-content :is(.content-card,.numbered-card,.comparison-card,.pricing-card) {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.article-content :is(.content-card,.numbered-card,.comparison-card,.pricing-card) > :last-child {
+  margin-bottom: 0;
+}
+.article-content :is(.content-card,.numbered-card,.comparison-card,.pricing-card) > ul,
+.article-content :is(.content-card,.numbered-card,.comparison-card,.pricing-card) > ol {
+  flex: 1 1 auto;
+}
+.article-content :is(.content-card,.numbered-card,.comparison-card,.pricing-card) > .imported-cta {
+  margin-top: auto;
+}
+
+.article-content .content-card-grid,
+.article-content .numbered-card-grid,
+.article-content .comparison-grid,
+.article-content .pricing-grid {
+  width: 100%;
+  max-width: 100%;
+}
+
+.article-content .card-heading-row {
+  min-height: 48px;
+}
+.article-content .card-icon {
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 11%, var(--surface));
+  font-size: 21px;
+  line-height: 1;
+}
+
+/* Media is always a single semantic card: frame first, caption below. */
+.article-content .media-gallery {
+  width: 100%;
+  max-width: 100%;
+}
+.article-content .media-card {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+.article-content .media-card > .content-video-wrap {
+  grid-column: 1;
+  width: 100% !important;
+  aspect-ratio: 16 / 9 !important;
+}
+.article-content .media-card > .media-caption {
+  grid-column: 1;
+  width: 100%;
+  box-sizing: border-box;
+}
+.article-content .content-video-wrap source { display: none !important; }
+
+/* Pricing is mutually exclusive with comparison styling. */
+.article-content .pricing-grid {
+  align-items: stretch;
+}
+.article-content .pricing-card {
+  border: 1px solid color-mix(in srgb, var(--primary) 38%, var(--line));
+  background: var(--surface);
+  box-shadow: none;
+}
+.article-content .pricing-card.is-featured {
+  border-width: 2px;
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+}
+.article-content .pricing-card-head {
+  min-height: 112px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+}
+.article-content .pricing-card-head::before,
+.article-content .pricing-card-head::after { content: none !important; }
+.article-content .pricing-title {
+  margin: 2px 0 8px !important;
+  font-size: clamp(21px, 2.3vw, 27px) !important;
+  line-height: 1.25 !important;
+}
+.article-content .pricing-current {
+  display: block;
+  font-size: clamp(42px, 5vw, 60px);
+}
+.article-content .pricing-old { display: block; }
+.article-content .pricing-badge {
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* A section label is an eyebrow only; generic labels are removed by the compiler. */
+.article-content .section-kicker {
+  float: none !important;
+  clear: both;
+}
+
+@media (max-width: 720px) {
+  .article-content .content-card-grid,
+  .article-content .numbered-card-grid,
+  .article-content .comparison-grid,
+  .article-content .pricing-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-auto-rows: auto;
+  }
+  .article-content :is(.content-card,.numbered-card,.comparison-card,.pricing-card) {
+    height: auto;
+  }
+  .article-content .pricing-card-head { min-height: 0; }
+}

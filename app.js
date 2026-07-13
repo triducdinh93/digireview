@@ -1108,23 +1108,21 @@
   };
 
   const normalizeImportedStructures = (holder, post) => {
-    markSectionKickers(holder);
-    canonicalizeDirectoryTrees(holder);
-    canonicalizeCatalogLists(holder);
-    canonicalizeVideoCards(holder);
-    canonicalizeRepeatedCards(holder);
-    canonicalizeValueLists(holder);
-    canonicalizePricing(holder);
-    canonicalizeOrphanNotes(holder);
-    canonicalizePromosAndCtas(holder, post);
-    markSectionKickers(holder);
+    const normalizer = window.DigiReviewContentNormalizer;
+    if (!normalizer) {
+      console.warn("DigiReview content normalizer is unavailable.");
+      return;
+    }
+    normalizer.normalize(holder, {
+      affiliateUrl: post?.affiliateUrl || ""
+    });
   };
 
   const unwrapImportedNode = node => node.replaceWith(...node.childNodes);
 
   const safeImportedClass = value => String(value || "")
     .split(/\s+/)
-    .filter(name => /^(?:imported-|content-|table-scroll|code-scroll|section-kicker|layout-contained|media-|card-|numbered-|comparison-|pricing-|value-|catalog-|directory-|promo-|inline-note)/.test(name))
+    .filter(name => /^(?:dr-|is-|imported-|content-|table-scroll|code-scroll|section-kicker|layout-contained|media-|card-|numbered-|comparison-|pricing-|value-|catalog-|directory-|promo-|inline-note)/.test(name))
     .join(" ");
 
   const stripUnsafeImportedAttributes = holder => {
@@ -1152,6 +1150,7 @@
           else element.removeAttribute("class");
           return;
         }
+        if (name.startsWith("data-dr-")) return;
         if (!keep.has(name)) element.removeAttribute(attribute.name);
       });
     });
@@ -1326,7 +1325,6 @@
     });
 
     normalizeImportedStructures(holder, post);
-    normalizeGenericImportedBlocks(holder);
     return holder.innerHTML;
   };
 

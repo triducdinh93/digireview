@@ -1,11 +1,12 @@
 {
   "name": "digireview-google-sites-autofill",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
-  "description": "Canonical Google Sites import normalization with GitHub Actions and Playwright.",
+  "description": "DigiReview Google Sites extraction and structural layout audit with Playwright.",
   "scripts": {
-    "autofill": "node extract-google-sites.mjs"
+    "autofill": "node extract-google-sites.mjs",
+    "audit:layout": "node audit-content-layout.mjs"
   },
   "dependencies": {
     "playwright": "1.61.1"

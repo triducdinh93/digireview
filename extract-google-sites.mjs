@@ -4,6 +4,7 @@ import path from "node:path";
 
 const REQUESTS_DIR = path.resolve("autofill/requests");
 const RESULTS_DIR = path.resolve("autofill/results");
+const NORMALIZER_SOURCE = await fs.readFile(path.resolve("content-normalizer.js"), "utf8");
 
 const cleanText = value => String(value || "")
   .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -121,8 +122,14 @@ async function validateCanonicalLayout(browser, html) {
     const result = await page.evaluate(() => {
       const content = document.getElementById("article-content");
       const contentRect = content.getBoundingClientRect();
+      const visible = element => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+      };
       const allowed = element => Boolean(element.closest(".table-scroll,.code-scroll,.directory-tree"));
       const overflow = [...content.querySelectorAll("*")]
+        .filter(visible)
         .filter(element => !allowed(element))
         .filter(element => {
           const rect = element.getBoundingClientRect();
@@ -130,17 +137,66 @@ async function validateCanonicalLayout(browser, html) {
         })
         .slice(0, 12)
         .map(element => ({ tag: element.tagName, className: String(element.className || ""), width: Math.round(element.getBoundingClientRect().width) }));
+
+      const gridSelectors = ".comparison-grid,.pricing-grid,.numbered-card-grid,.content-card-grid";
+      const unevenGrids = [...content.querySelectorAll(gridSelectors)].filter(grid => {
+        const rows = new Map();
+        [...grid.children].filter(visible).forEach(card => {
+          const rect = card.getBoundingClientRect();
+          const rowKey = Math.round(rect.top / 4) * 4;
+          if (!rows.has(rowKey)) rows.set(rowKey, []);
+          rows.get(rowKey).push(rect.height);
+        });
+        return [...rows.values()].some(heights => heights.length > 1 && Math.max(...heights) - Math.min(...heights) > 3);
+      }).map(grid => String(grid.className || ""));
+
+      const mixedComponents = [...content.querySelectorAll("*")].filter(element => {
+        const grids = ["pricing-grid", "comparison-grid", "numbered-card-grid", "content-card-grid", "media-gallery"].filter(name => element.classList.contains(name));
+        const cards = ["pricing-card", "comparison-card", "numbered-card", "content-card", "media-card"].filter(name => element.classList.contains(name));
+        return grids.length > 1 || cards.length > 1;
+      }).map(element => String(element.className || ""));
+
+      const genericLabels = new Set([
+        "pricing", "faq", "my verdict", "verdict", "risk free", "risk-free", "the shift",
+        "cost comparison", "value breakdown", "what you download", "full library", "overview",
+        "summary", "bonuses", "bonus", "features", "evaluation", "audience fit", "what you get", "ideal for"
+      ]);
+      const orphanGenericLabels = [...content.querySelectorAll("p,div,span")]
+        .filter(element => element.children.length === 0 && genericLabels.has(String(element.textContent || "").trim().toLowerCase()))
+        .map(element => String(element.textContent || "").trim());
+
+      const ctas = [...content.querySelectorAll("a.imported-cta")];
+      const rawPriceBlocks = [...content.querySelectorAll("div,section")].filter(node => {
+        if (node.closest(".pricing-card,.pricing-grid")) return false;
+        const directList = [...node.children].some(child => /^(UL|OL)$/.test(child.tagName));
+        const directPrice = [...node.children].some(child => /^\s*\$\s*\d/.test(String(child.textContent || "").trim()));
+        return directList && directPrice;
+      }).length;
+
       return {
         overflow,
+        pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 3,
+        unevenGrids,
+        mixedComponents,
+        orphanGenericLabels,
         mediaCardsWithoutCaption: [...content.querySelectorAll(".media-card")].filter(card => !card.querySelector(".media-caption")).length,
-        rawVideoCount: [...content.querySelectorAll("video,iframe,object,embed")].filter(media => !media.closest(".content-video-wrap")).length,
-        rawPriceBlocks: [...content.querySelectorAll("div,section")].filter(node => /\$\s*\d/.test(node.textContent || "") && node.querySelector(":scope > ul, :scope > ol") && !node.closest(".pricing-card,.pricing-grid")).length
+        mediaCardsWithMultiplePlayers: [...content.querySelectorAll(".media-card")].filter(card => card.querySelectorAll("video,iframe,object,embed").length !== 1).length,
+        rawVideoCount: [...content.querySelectorAll("video,iframe,object,embed")].filter(media => !media.closest(".content-video-wrap,.media-card")).length,
+        ctaCount: ctas.length,
+        ctaWithoutHref: ctas.filter(link => !link.getAttribute("href")).length,
+        pricingComparisonConflicts: content.querySelectorAll(".pricing-grid.comparison-grid,.pricing-card.comparison-card").length,
+        rawPriceBlocks
       };
     });
     measurements[viewport.name] = result;
-    if (result.overflow.length) warnings.push(`${viewport.name}: ${result.overflow.length} element(s) exceeded the article column.`);
-    if (result.mediaCardsWithoutCaption) warnings.push(`${viewport.name}: ${result.mediaCardsWithoutCaption} media card(s) have no normalized caption.`);
-    if (result.rawVideoCount) warnings.push(`${viewport.name}: ${result.rawVideoCount} video embed(s) are outside the responsive media wrapper.`);
+    if (result.pageOverflow || result.overflow.length) warnings.push(`${viewport.name}: content exceeded the article or viewport width.`);
+    if (result.unevenGrids.length) warnings.push(`${viewport.name}: adjacent cards did not have equal heights.`);
+    if (result.mixedComponents.length || result.pricingComparisonConflicts) warnings.push(`${viewport.name}: mutually exclusive component types were applied to the same block.`);
+    if (result.orphanGenericLabels.length) warnings.push(`${viewport.name}: generic section labels remained as orphan text.`);
+    if (result.mediaCardsWithMultiplePlayers) warnings.push(`${viewport.name}: a media card contains an invalid number of players.`);
+    if (result.rawVideoCount) warnings.push(`${viewport.name}: video embed(s) are outside the responsive media card.`);
+    if (result.ctaCount > 3 || result.ctaWithoutHref) warnings.push(`${viewport.name}: CTA frequency or hyperlink validation failed.`);
+    if (result.rawPriceBlocks) warnings.push(`${viewport.name}: raw pricing blocks were not converted into canonical pricing cards.`);
     await context.close();
   }
 
@@ -148,6 +204,9 @@ async function validateCanonicalLayout(browser, html) {
 }
 
 async function inspectFrame(frame) {
+  await frame.evaluate(source => {
+    if (!globalThis.DigiReviewContentNormalizer) (0, eval)(source);
+  }, NORMALIZER_SOURCE);
   return frame.evaluate(() => {
     const absolute = value => {
       try { return new URL(value, location.href).href; }
@@ -528,7 +587,7 @@ async function inspectFrame(frame) {
       wrap.appendChild(pre);
     });
 
-    canonicalizeClone(clone);
+    globalThis.DigiReviewContentNormalizer.normalize(clone, { force: true });
 
     for (let pass = 0; pass < 4; pass += 1) {
       clone.querySelectorAll("div,section").forEach(node => {
@@ -597,7 +656,7 @@ async function inspectFrame(frame) {
       thumbnail,
       warnings,
       stats,
-      layoutVersion: "canonical-v3"
+      layoutVersion: "structural-v4"
     };
   });
 }
