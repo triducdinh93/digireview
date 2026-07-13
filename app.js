@@ -1418,6 +1418,8 @@
     const views = incrementView(post.slug);
     const related = relatedPosts(post);
     const cleanedArticleContent = sanitizeArticleHtml(post);
+    const inlineCtaCount = (cleanedArticleContent.match(/class=["'][^"']*\bimported-cta\b/gi) || []).length;
+    const metadataCta = inlineCtaCount ? "" : renderCta(post);
     app.innerHTML = `
       <article class="article-shell">
         <div class="container">
@@ -1433,10 +1435,9 @@
               <div id="toc-container"></div>
               <img class="article-hero" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'">
               ${renderOriginalSource(post)}
-              ${renderCta(post)}
               <div class="article-content" id="article-content">${cleanedArticleContent}</div>
               ${renderProsCons(post)}
-              ${renderCta(post)}
+              ${metadataCta}
               <div class="tag-row">${(post.tags || []).map(tag => `<a href="#search=${encodeURIComponent(tag)}">#${escapeHtml(tag)}</a>`).join("")}</div>
               <section class="rating-box"><strong>Was this article helpful?</strong><div class="rating-stars" data-rating-slug="${escapeHtml(post.slug)}">${[1,2,3,4,5].map(star => `<button type="button" data-rating="${star}" aria-label="Rate ${star} out of 5">★</button>`).join("")}</div><small id="rating-message">Your rating is stored in this browser.</small></section>
               <section class="author-box"><img class="author-avatar" src="${escapeHtml(NESI_AUTHOR.avatar)}" alt="${escapeHtml(NESI_AUTHOR.name)}"><div><h2>About ${escapeHtml(NESI_AUTHOR.name)}</h2><p>${escapeHtml(NESI_AUTHOR.bio)}</p></div></section>
@@ -1450,6 +1451,14 @@
           </div>
         </div>
       </article>`;
+    const renderedArticleContent = document.getElementById("article-content");
+    if (renderedArticleContent && window.DigiReviewContentNormalizer) {
+      const normalization = window.DigiReviewContentNormalizer.normalize(renderedArticleContent, {
+        affiliateUrl: post?.affiliateUrl || "",
+        force: true
+      });
+      if (normalization.issues?.length) console.warn("Safe-flow normalization warnings:", normalization.issues);
+    }
     prepareArticleMedia();
     buildToc();
     bindDynamicEvents();

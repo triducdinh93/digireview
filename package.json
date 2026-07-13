@@ -1,12 +1,13 @@
 {
   "name": "digireview-google-sites-autofill",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
-  "description": "DigiReview Google Sites extraction and structural layout audit with Playwright.",
+  "description": "DigiReview Google Sites extraction with a conservative safe-flow renderer and Playwright layout audit.",
   "scripts": {
     "autofill": "node extract-google-sites.mjs",
-    "audit:layout": "node audit-content-layout.mjs"
+    "audit:layout": "node audit-content-layout.mjs",
+    "audit:fixtures": "node audit-safe-flow-fixtures.mjs"
   },
   "dependencies": {
     "playwright": "1.61.1"

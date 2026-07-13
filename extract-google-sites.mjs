@@ -4,7 +4,6 @@ import path from "node:path";
 
 const REQUESTS_DIR = path.resolve("autofill/requests");
 const RESULTS_DIR = path.resolve("autofill/results");
-const NORMALIZER_SOURCE = await fs.readFile(path.resolve("content-normalizer.js"), "utf8");
 
 const cleanText = value => String(value || "")
   .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -103,6 +102,7 @@ async function autoScroll(page) {
 
 async function validateCanonicalLayout(browser, html) {
   const css = await fs.readFile(path.resolve("style.css"), "utf8").catch(() => "");
+  const normalizerSource = await fs.readFile(path.resolve("content-normalizer.js"), "utf8");
   const viewports = [
     { name: "desktop", width: 1440, height: 900 },
     { name: "mobile", width: 390, height: 844 }
@@ -118,6 +118,11 @@ async function validateCanonicalLayout(browser, html) {
       `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body><main style="max-width:1180px;margin:auto"><div class="article-layout"><article class="article-main"><div id="article-content" class="article-content">${html}</div></article></div></main></body></html>`,
       { waitUntil: "domcontentloaded" }
     );
+    await page.addScriptTag({ content: normalizerSource });
+    await page.evaluate(() => {
+      const content = document.getElementById("article-content");
+      globalThis.DigiReviewContentNormalizer.normalize(content, { force: true });
+    });
 
     const result = await page.evaluate(() => {
       const content = document.getElementById("article-content");
@@ -127,7 +132,7 @@ async function validateCanonicalLayout(browser, html) {
         const style = getComputedStyle(element);
         return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
       };
-      const allowed = element => Boolean(element.closest(".table-scroll,.code-scroll,.directory-tree"));
+      const allowed = element => Boolean(element.closest(".table-scroll,.code-scroll"));
       const overflow = [...content.querySelectorAll("*")]
         .filter(visible)
         .filter(element => !allowed(element))
@@ -138,65 +143,43 @@ async function validateCanonicalLayout(browser, html) {
         .slice(0, 12)
         .map(element => ({ tag: element.tagName, className: String(element.className || ""), width: Math.round(element.getBoundingClientRect().width) }));
 
-      const gridSelectors = ".comparison-grid,.pricing-grid,.numbered-card-grid,.content-card-grid";
-      const unevenGrids = [...content.querySelectorAll(gridSelectors)].filter(grid => {
-        const rows = new Map();
-        [...grid.children].filter(visible).forEach(card => {
-          const rect = card.getBoundingClientRect();
-          const rowKey = Math.round(rect.top / 4) * 4;
-          if (!rows.has(rowKey)) rows.set(rowKey, []);
-          rows.get(rowKey).push(rect.height);
-        });
-        return [...rows.values()].some(heights => heights.length > 1 && Math.max(...heights) - Math.min(...heights) > 3);
-      }).map(grid => String(grid.className || ""));
-
-      const mixedComponents = [...content.querySelectorAll("*")].filter(element => {
-        const grids = ["pricing-grid", "comparison-grid", "numbered-card-grid", "content-card-grid", "media-gallery"].filter(name => element.classList.contains(name));
-        const cards = ["pricing-card", "comparison-card", "numbered-card", "content-card", "media-card"].filter(name => element.classList.contains(name));
-        return grids.length > 1 || cards.length > 1;
-      }).map(element => String(element.className || ""));
-
       const genericLabels = new Set([
         "pricing", "faq", "my verdict", "verdict", "risk free", "risk-free", "the shift",
         "cost comparison", "value breakdown", "what you download", "full library", "overview",
-        "summary", "bonuses", "bonus", "features", "evaluation", "audience fit", "what you get", "ideal for"
+        "summary", "bonuses", "bonus", "features", "evaluation", "audience fit", "what you get",
+        "ideal for", "product overview", "honest assessment", "watch before you buy"
       ]);
+
       const orphanGenericLabels = [...content.querySelectorAll("p,div,span")]
         .filter(element => element.children.length === 0 && genericLabels.has(String(element.textContent || "").trim().toLowerCase()))
         .map(element => String(element.textContent || "").trim());
 
+      const legacyLayout = [...content.querySelectorAll("*")].filter(element =>
+        [...element.classList].some(name => /^(?:pricing-grid|pricing-card|comparison-grid|comparison-card|numbered-card-grid|content-card-grid|promo-card|media-gallery)$/.test(name))
+      );
+
       const ctas = [...content.querySelectorAll("a.imported-cta")];
-      const rawPriceBlocks = [...content.querySelectorAll("div,section")].filter(node => {
-        if (node.closest(".pricing-card,.pricing-grid")) return false;
-        const directList = [...node.children].some(child => /^(UL|OL)$/.test(child.tagName));
-        const directPrice = [...node.children].some(child => /^\s*\$\s*\d/.test(String(child.textContent || "").trim()));
-        return directList && directPrice;
-      }).length;
+      const audit = globalThis.DigiReviewContentNormalizer.audit(content);
 
       return {
         overflow,
         pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 3,
-        unevenGrids,
-        mixedComponents,
         orphanGenericLabels,
-        mediaCardsWithoutCaption: [...content.querySelectorAll(".media-card")].filter(card => !card.querySelector(".media-caption")).length,
-        mediaCardsWithMultiplePlayers: [...content.querySelectorAll(".media-card")].filter(card => card.querySelectorAll("video,iframe,object,embed").length !== 1).length,
-        rawVideoCount: [...content.querySelectorAll("video,iframe,object,embed")].filter(media => !media.closest(".content-video-wrap,.media-card")).length,
+        legacyLayoutCount: legacyLayout.length,
+        rawVideoCount: [...content.querySelectorAll("video,iframe,object,embed")].filter(media => !media.closest(".content-video-wrap")).length,
         ctaCount: ctas.length,
-        ctaWithoutHref: ctas.filter(link => !link.getAttribute("href")).length,
-        pricingComparisonConflicts: content.querySelectorAll(".pricing-grid.comparison-grid,.pricing-card.comparison-card").length,
-        rawPriceBlocks
+        ctaWithoutHref: ctas.filter(link => !/^https?:\/\//i.test(link.getAttribute("href") || "")).length,
+        auditIssues: audit.issues
       };
     });
+
     measurements[viewport.name] = result;
     if (result.pageOverflow || result.overflow.length) warnings.push(`${viewport.name}: content exceeded the article or viewport width.`);
-    if (result.unevenGrids.length) warnings.push(`${viewport.name}: adjacent cards did not have equal heights.`);
-    if (result.mixedComponents.length || result.pricingComparisonConflicts) warnings.push(`${viewport.name}: mutually exclusive component types were applied to the same block.`);
     if (result.orphanGenericLabels.length) warnings.push(`${viewport.name}: generic section labels remained as orphan text.`);
-    if (result.mediaCardsWithMultiplePlayers) warnings.push(`${viewport.name}: a media card contains an invalid number of players.`);
-    if (result.rawVideoCount) warnings.push(`${viewport.name}: video embed(s) are outside the responsive media card.`);
-    if (result.ctaCount > 3 || result.ctaWithoutHref) warnings.push(`${viewport.name}: CTA frequency or hyperlink validation failed.`);
-    if (result.rawPriceBlocks) warnings.push(`${viewport.name}: raw pricing blocks were not converted into canonical pricing cards.`);
+    if (result.legacyLayoutCount) warnings.push(`${viewport.name}: legacy inferred layout classes remained after safe normalization.`);
+    if (result.rawVideoCount) warnings.push(`${viewport.name}: video embed(s) are outside the responsive media wrapper.`);
+    if (result.ctaCount > 2 || result.ctaWithoutHref) warnings.push(`${viewport.name}: CTA frequency or hyperlink validation failed.`);
+    if (result.auditIssues.length) warnings.push(...result.auditIssues.map(issue => `${viewport.name}: ${issue}`));
     await context.close();
   }
 
@@ -204,9 +187,6 @@ async function validateCanonicalLayout(browser, html) {
 }
 
 async function inspectFrame(frame) {
-  await frame.evaluate(source => {
-    if (!globalThis.DigiReviewContentNormalizer) (0, eval)(source);
-  }, NORMALIZER_SOURCE);
   return frame.evaluate(() => {
     const absolute = value => {
       try { return new URL(value, location.href).href; }
@@ -230,138 +210,6 @@ async function inspectFrame(frame) {
       const text = normalize(value);
       if (!text || text.length > 64 || text.split(/\s+/).length > 10) return false;
       return true;
-    };
-
-    const canonicalizeClone = clone => {
-      clone.querySelectorAll("section,.imported-section").forEach(section => {
-        section.classList.add("imported-section");
-        const children = directChildren(section);
-        const headingIndex = children.findIndex(child => /^H[2-4]$/.test(child.tagName));
-        if (headingIndex > 0) {
-          children.slice(0, headingIndex).forEach(lead => {
-            const text = normalize(lead.textContent);
-            if (isShortLabel(text) && !lead.querySelector("img,video,iframe,table,ul,ol,a")) lead.classList.add("section-kicker");
-          });
-        }
-      });
-
-      clone.querySelectorAll("div").forEach(node => {
-        if (node.closest("pre,.directory-tree") || node.querySelector("h2,h3,h4,table,ul,ol,img,video,iframe,a")) return;
-        const raw = String(node.innerText || node.textContent || "").replace(/\r/g, "");
-        const markers = (raw.match(/[├└│]|\.(?:mp4|mp3|png|jpg|txt|zip)\b/gi) || []).length;
-        const lines = raw.split("\n").map(line => line.replace(/[ \t]+/g, " ").trimEnd()).filter(line => line.trim());
-        if (markers < 4 || lines.length < 4) return;
-        const pre = document.createElement("pre");
-        pre.className = "directory-tree";
-        const code = document.createElement("code");
-        code.textContent = lines.join("\n");
-        pre.appendChild(code);
-        node.replaceWith(pre);
-      });
-
-      clone.querySelectorAll("div").forEach(container => {
-        const children = directChildren(container);
-        if (children.length < 8 || children.length > 120) return;
-        const parsed = children.map(child => {
-          const first = child.firstElementChild;
-          const number = normalize(first?.textContent);
-          if (!first || first.tagName !== "SPAN" || !/^\d{1,3}$/.test(number)) return null;
-          const copy = child.cloneNode(true);
-          copy.firstElementChild?.remove();
-          const label = normalize(copy.textContent);
-          return label ? { number: Number(number), label } : null;
-        });
-        if (parsed.some(item => !item)) return;
-        const ol = document.createElement("ol");
-        ol.className = "catalog-list";
-        if (parsed[0].number !== 1) ol.start = parsed[0].number;
-        parsed.forEach(item => {
-          const li = document.createElement("li");
-          li.textContent = item.label;
-          ol.appendChild(li);
-        });
-        container.replaceWith(ol);
-      });
-
-      clone.querySelectorAll("div,section").forEach(card => {
-        if (card.classList.contains("content-video-wrap")) return;
-        const children = directChildren(card);
-        const mediaChild = children.find(child => child.matches?.("video,iframe,object,embed,.content-video-wrap") || child.querySelector?.("video,iframe,object,embed,.content-video-wrap"));
-        if (!mediaChild || card.querySelectorAll("video,iframe,object,embed").length !== 1 || children.length < 2 || children.length > 4) return;
-        const caption = children.find(child => child !== mediaChild && normalize(child.textContent));
-        if (!caption || caption.querySelector("h2,h3,ul,ol,table,img,video,iframe")) return;
-        card.classList.add("media-card");
-        caption.classList.add("media-caption");
-        caption.querySelector("strong")?.classList.add("media-caption-title");
-      });
-      clone.querySelectorAll("div,section").forEach(container => {
-        const children = directChildren(container);
-        if (children.length >= 2 && children.length <= 8 && children.every(child => child.classList.contains("media-card"))) container.classList.add("media-gallery");
-      });
-
-      clone.querySelectorAll("div,section").forEach(container => {
-        if (container.closest(".media-gallery,.pricing-grid,.catalog-list") || container.classList.contains("content-video-wrap")) return;
-        const children = directChildren(container);
-        if (children.length < 2 || children.length > 8 || !children.every(child => ["DIV","SECTION","ARTICLE"].includes(child.tagName))) return;
-        const info = children.map(card => {
-          const heading = directHeading(card);
-          const badge = directChildren(card).find(child => child !== heading && /^0?\d{1,2}$/.test(normalize(child.textContent)));
-          return { card, heading, badge, hasBody: Boolean(card.querySelector(":scope > p, :scope > ul, :scope > ol")) };
-        });
-        if (!info.every(item => item.heading && item.hasBody)) return;
-        const comparison = info.length === 2 && info.every(item => item.card.querySelector(":scope > ul, :scope > ol"));
-        const numbered = info.every(item => item.badge);
-        container.classList.add(comparison ? "comparison-grid" : numbered ? "numbered-card-grid" : "content-card-grid");
-        info.forEach(item => {
-          item.card.classList.add(comparison ? "comparison-card" : numbered ? "numbered-card" : "content-card");
-          item.heading.classList.add("card-title");
-          if (numbered) {
-            item.badge.classList.add("card-number");
-            const row = document.createElement("div");
-            row.className = "card-heading-row";
-            item.card.insertBefore(row, item.badge);
-            row.appendChild(item.badge);
-            row.appendChild(item.heading);
-          }
-        });
-      });
-
-      clone.querySelectorAll("div").forEach(container => {
-        const rows = directChildren(container);
-        if (rows.length < 3 || rows.length > 12) return;
-        if (!rows.every(row => {
-          const spans = directChildren(row).filter(child => child.tagName === "SPAN");
-          return spans.length >= 2 && !row.querySelector("h2,h3,h4,ul,ol,table,img,video,iframe,a");
-        })) return;
-        if (rows.filter(row => priceNumber(normalize(row.textContent)) !== null).length < Math.ceil(rows.length / 2)) return;
-        container.classList.add("value-list");
-        rows.forEach(row => {
-          row.classList.add("value-row");
-          const spans = directChildren(row).filter(child => child.tagName === "SPAN");
-          spans[0].classList.add("value-label");
-          spans[spans.length - 1].classList.add("value-amount");
-        });
-      });
-
-      clone.querySelectorAll("div,section").forEach(container => {
-        const children = directChildren(container);
-        const cards = children.filter(child => {
-          if (!["DIV","SECTION","ARTICLE"].includes(child.tagName) || !child.querySelector(":scope > ul, :scope > ol")) return false;
-          return directChildren(child).some(block => {
-            const text = normalize(block.textContent);
-            return text.length <= 24 && priceNumber(text) !== null && !block.querySelector("ul,ol,a");
-          });
-        });
-        if (cards.length < 2 || cards.length !== children.length) return;
-        container.classList.add("pricing-grid");
-        cards.forEach(card => card.classList.add("pricing-card"));
-      });
-
-      clone.querySelectorAll("a[href]").forEach(link => {
-        if (link.querySelector("img")) return;
-        const label = normalize(link.textContent);
-        if (actionPattern.test(label) || /\$\s*\d/.test(label)) link.classList.add("imported-cta");
-      });
     };
 
     const candidates = [
@@ -587,8 +435,6 @@ async function inspectFrame(frame) {
       wrap.appendChild(pre);
     });
 
-    globalThis.DigiReviewContentNormalizer.normalize(clone, { force: true });
-
     for (let pass = 0; pass < 4; pass += 1) {
       clone.querySelectorAll("div,section").forEach(node => {
         if (node.className || node.querySelector(":scope > h2, :scope > h3, :scope > h4") || directText(node)) return;
@@ -656,7 +502,7 @@ async function inspectFrame(frame) {
       thumbnail,
       warnings,
       stats,
-      layoutVersion: "structural-v4"
+      layoutVersion: "semantic-source-v1"
     };
   });
 }
@@ -793,7 +639,7 @@ async function extractPage(browser, targetUrl) {
       images: (candidate.images || []).map(image => image.url).filter(Boolean),
       wordCount: candidate.words,
       sourceFrameUrl: candidate.frameUrl,
-      layoutVersion: candidate.layoutVersion || "canonical-v3",
+      layoutVersion: candidate.layoutVersion || "semantic-source-v1",
       importQuality: {
         score: qualityScore,
         warnings,

@@ -55,45 +55,42 @@ try {
             const style = getComputedStyle(element);
             return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
           };
+
           const overflow = [...content.querySelectorAll("*")]
             .filter(visible)
-            .filter(element => !element.closest(".table-scroll,.code-scroll,.directory-tree"))
+            .filter(element => !element.closest(".table-scroll,.code-scroll"))
             .filter(element => {
               const rect = element.getBoundingClientRect();
               return rect.right > contentRect.right + 3 || rect.left < contentRect.left - 3 || rect.width > contentRect.width + 3;
             }).length;
 
-          const unevenGrids = [...content.querySelectorAll(".comparison-grid,.pricing-grid,.numbered-card-grid,.content-card-grid")]
-            .filter(grid => {
-              const rows = new Map();
-              [...grid.children].filter(visible).forEach(card => {
-                const rect = card.getBoundingClientRect();
-                const key = Math.round(rect.top / 4) * 4;
-                if (!rows.has(key)) rows.set(key, []);
-                rows.get(key).push(rect.height);
-              });
-              return [...rows.values()].some(heights => heights.length > 1 && Math.max(...heights) - Math.min(...heights) > 3);
-            }).length;
+          const legacyLayouts = [...content.querySelectorAll("*")].filter(element =>
+            [...element.classList].some(name => /^(?:pricing-grid|pricing-card|comparison-grid|comparison-card|numbered-card-grid|numbered-card|content-card-grid|content-card|promo-card|media-gallery)$/.test(name))
+          ).length;
 
-          const mixedComponents = [...content.querySelectorAll("*")].filter(element => {
-            const grids = ["pricing-grid", "comparison-grid", "numbered-card-grid", "content-card-grid", "media-gallery"].filter(name => element.classList.contains(name));
-            const cards = ["pricing-card", "comparison-card", "numbered-card", "content-card", "media-card"].filter(name => element.classList.contains(name));
-            return grids.length > 1 || cards.length > 1;
-          }).length;
+          const genericLabels = new Set([
+            "pricing", "faq", "my verdict", "verdict", "risk free", "risk-free", "the shift",
+            "cost comparison", "value breakdown", "what you download", "full library", "overview",
+            "summary", "bonuses", "bonus", "features", "evaluation", "audience fit", "what you get",
+            "ideal for", "product overview", "honest assessment", "watch before you buy"
+          ]);
+          const orphanGenericLabels = [...content.querySelectorAll("p,div,span")]
+            .filter(element => element.children.length === 0 && genericLabels.has(String(element.textContent || "").trim().toLowerCase()))
+            .length;
 
           const ctas = [...content.querySelectorAll("a.imported-cta")];
           const media = [...content.querySelectorAll("video,iframe,object,embed")];
           const normalizerAudit = window.DigiReviewContentNormalizer?.audit(content) || { issues: ["Normalizer unavailable."] };
+
           return {
             pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 3,
             overflow,
-            unevenGrids,
-            mixedComponents,
+            legacyLayouts,
+            orphanGenericLabels,
             ctaCount: ctas.length,
-            ctaWithoutHref: ctas.filter(link => !link.getAttribute("href")).length,
-            unwrappedMedia: media.filter(item => !item.closest(".content-video-wrap,.media-card")).length,
-            mediaCardErrors: [...content.querySelectorAll(".media-card")].filter(card => card.querySelectorAll("video,iframe,object,embed").length !== 1).length,
-            pricingConflicts: content.querySelectorAll(".pricing-grid.comparison-grid,.pricing-card.comparison-card").length,
+            ctaWithoutHref: ctas.filter(link => !/^https?:\/\//i.test(link.getAttribute("href") || "")).length,
+            unwrappedMedia: media.filter(item => !item.closest(".content-video-wrap")).length,
+            safeRoot: content.querySelectorAll(".dr-safe-flow-root").length,
             normalizerIssues: normalizerAudit.issues || []
           };
         });
@@ -101,10 +98,11 @@ try {
         const failures = [];
         if (errors.length) failures.push(`JavaScript errors: ${errors.join(" | ")}`);
         if (result.pageOverflow || result.overflow) failures.push("Content overflow detected.");
-        if (result.unevenGrids) failures.push("Adjacent card heights are inconsistent.");
-        if (result.mixedComponents || result.pricingConflicts) failures.push("Mutually exclusive components overlap.");
-        if (result.ctaCount > 3 || result.ctaWithoutHref) failures.push("CTA validation failed.");
-        if (result.unwrappedMedia || result.mediaCardErrors) failures.push("Media card validation failed.");
+        if (result.legacyLayouts) failures.push("Legacy inferred card/grid layout remains.");
+        if (result.orphanGenericLabels) failures.push("Generic orphan labels remain.");
+        if (result.ctaCount > 2 || result.ctaWithoutHref) failures.push("CTA validation failed.");
+        if (result.unwrappedMedia) failures.push("Media wrapper validation failed.");
+        if (result.safeRoot !== 1) failures.push("Safe-flow root validation failed.");
         if (result.normalizerIssues.length) failures.push(...result.normalizerIssues);
 
         const record = { viewport: viewport.name, slug: post.slug, ...result, failures };
@@ -125,11 +123,11 @@ try {
 }
 
 await fs.writeFile("layout-audit-report.json", JSON.stringify(report, null, 2) + "\n");
-console.log(`Audited ${report.checks.length} desktop/mobile article renders.`);
+console.log(`Audited ${report.checks.length} desktop/mobile article renders in safe-flow mode.`);
 if (report.failures.length) {
   console.error(`Layout audit failed for ${report.failures.length} render(s).`);
   report.failures.slice(0, 20).forEach(item => console.error(`${item.viewport} · ${item.slug}: ${item.failures.join("; ")}`));
   process.exitCode = 1;
 } else {
-  console.log("Layout audit passed with no detected regressions.");
+  console.log("Safe-flow layout audit passed with no detected regressions.");
 }

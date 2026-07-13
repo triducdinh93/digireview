@@ -1625,3 +1625,187 @@ html, body {
   }
   .article-content .pricing-card-head { min-height: 0; }
 }
+
+/* DigiReview V22 — universal safe-flow renderer.
+   Imported pages are rendered as a stable semantic article. Source-specific card layouts are intentionally not recreated. */
+.article-content .dr-safe-flow-root {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.article-content .dr-safe-flow-root > :first-child { margin-top: 0; }
+.article-content .dr-safe-flow-root > :last-child { margin-bottom: 0; }
+
+.article-content .safe-flow-group {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 24px 0 30px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.article-content .safe-flow-block {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 0 0 28px !important;
+  padding: 0 0 24px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.article-content .safe-flow-block:last-child { margin-bottom: 0 !important; }
+.article-content .safe-flow-block > :first-child { margin-top: 0 !important; }
+.article-content .safe-flow-block > :last-child { margin-bottom: 0 !important; }
+
+.article-content .safe-media-block {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 26px 0 32px !important;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.article-content .safe-media-block .content-video-wrap {
+  width: 100% !important;
+  max-width: 100% !important;
+  aspect-ratio: 16 / 9 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #000;
+}
+.article-content .safe-media-block .content-video-wrap > :where(video,iframe,object,embed) {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  border: 0 !important;
+}
+.article-content .safe-media-caption {
+  display: block;
+  padding: 13px 16px 15px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.article-content .safe-media-caption > :first-child { margin-top: 0; }
+.article-content .safe-media-caption > :last-child { margin-bottom: 0; }
+
+.article-content .section-kicker {
+  display: inline-flex !important;
+  width: fit-content !important;
+  max-width: 100%;
+  margin: 18px 0 8px !important;
+  padding: 6px 11px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: color-mix(in srgb, var(--primary) 11%, var(--surface)) !important;
+  color: var(--primary-dark) !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  line-height: 1.2 !important;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  box-shadow: none !important;
+}
+.article-content .inline-note {
+  display: block !important;
+  width: fit-content !important;
+  max-width: 100%;
+  margin: 14px 0 20px !important;
+  padding: 10px 13px !important;
+  border: 0 !important;
+  border-left: 3px solid var(--primary) !important;
+  border-radius: 8px !important;
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface)) !important;
+  color: var(--text) !important;
+  font-weight: 750 !important;
+  box-shadow: none !important;
+}
+
+.article-content .imported-cta-wrap {
+  display: block !important;
+  margin: 24px 0 30px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  text-align: left !important;
+}
+.article-content a.imported-cta {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: auto !important;
+  max-width: 100%;
+  min-height: 46px;
+  padding: 12px 18px !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark)) !important;
+  color: #fff !important;
+  font-weight: 850 !important;
+  line-height: 1.25 !important;
+  text-decoration: none !important;
+  box-shadow: 0 8px 18px rgba(17,109,65,.14) !important;
+}
+.article-content a.imported-cta::after { content: "→"; }
+
+/* Disable all legacy inferred layouts even if an older imported article still contains their classes. */
+.article-content :is(
+  .pricing-grid,.comparison-grid,.numbered-card-grid,.content-card-grid,.media-gallery,
+  .pricing-card,.comparison-card,.numbered-card,.content-card,.promo-card,
+  .imported-pricing-box,.imported-highlight-box,.imported-steps-grid,.imported-feature-grid
+) {
+  display: block !important;
+  grid-template-columns: none !important;
+  grid-auto-rows: auto !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.article-content :where(h2,h3,h4,p,li,blockquote,figcaption,a,strong,em,span) {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.article-content :where(img,video,iframe,object,embed,table,pre) {
+  max-width: 100%;
+}
+.article-content .table-scroll,
+.article-content .code-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 620px) {
+  .article-content .safe-flow-block { margin-bottom: 22px !important; padding-bottom: 20px !important; }
+  .article-content .safe-media-block { margin: 22px 0 26px !important; border-radius: 12px; }
+  .article-content .safe-media-caption { padding: 11px 13px 13px; font-size: 13px; }
+  .article-content a.imported-cta { width: 100% !important; }
+}
