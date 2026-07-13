@@ -1,12 +1,6 @@
-/*
-  DigiReview external services configuration.
-
-  Only public function endpoints belong in this file.
-  Never place a Supabase service-role key or other private secret here.
-*/
 window.DIGIREVIEW_SERVICES = {
-  extractorEndpoint: "",
+  extractorEndpoint: "https://dgjkpmfcprnnikmgxjfh.supabase.co/functions/v1/extract-google-site",
   comments: {
-    endpoint: ""
+    endpoint: "https://dgjkpmfcprnnikmgxjfh.supabase.co/functions/v1/comments"
   }
 };
