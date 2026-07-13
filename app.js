@@ -407,7 +407,7 @@
         <label class="comment-honeypot" aria-hidden="true">Website
           <input name="website" type="text" tabindex="-1" autocomplete="off">
         </label>
-        <div class="turnstile-slot" id="comment-turnstile"></div>
+        <input name="started_at" type="hidden" value="${Date.now()}">
         <div class="comment-form-actions">
           <button type="submit">Post comment</button>
           <span class="comment-privacy">Your email is used for moderation and is never displayed.</span>
@@ -431,19 +431,6 @@
       : `<div class="comment-empty">No comments yet. Be the first to share a helpful thought.</div>`;
   };
 
-  const waitForTurnstile = () => new Promise((resolve, reject) => {
-    if (window.turnstile) return resolve(window.turnstile);
-    const started = Date.now();
-    const timer = window.setInterval(() => {
-      if (window.turnstile) {
-        window.clearInterval(timer);
-        resolve(window.turnstile);
-      } else if (Date.now() - started > 12000) {
-        window.clearInterval(timer);
-        reject(new Error("CAPTCHA could not be loaded."));
-      }
-    }, 150);
-  });
 
   const initComments = async (post) => {
     const config = services.comments || {};
@@ -452,15 +439,12 @@
     const message = document.getElementById("comment-form-message");
     if (!status || !form) return;
 
-    if (!config.endpoint || !config.turnstileSiteKey) {
-      status.innerHTML = `Guest comments are prepared but not connected yet. Complete the Supabase and Cloudflare Turnstile setup in <code>README-COMMENTS-VI.md</code>.`;
+    if (!config.endpoint) {
+      status.innerHTML = `Guest comments are prepared but not connected yet. Complete the Supabase setup in <code>README-NO-CAPTCHA-VI.md</code>.`;
       form.hidden = true;
       renderCommentItems([]);
       return;
     }
-
-    let captchaToken = "";
-    let widgetId = null;
 
     const loadComments = async () => {
       status.textContent = "Loading comments…";
@@ -481,18 +465,6 @@
       }
     };
 
-    try {
-      const turnstile = await waitForTurnstile();
-      widgetId = turnstile.render("#comment-turnstile", {
-        sitekey: config.turnstileSiteKey,
-        theme: document.documentElement.dataset.theme === "dark" ? "dark" : "light",
-        callback: token => { captchaToken = token; },
-        "expired-callback": () => { captchaToken = ""; },
-        "error-callback": () => { captchaToken = ""; }
-      });
-    } catch (error) {
-      status.textContent = error.message;
-    }
 
     form.addEventListener("submit", async event => {
       event.preventDefault();
@@ -503,6 +475,7 @@
       const email = String(formData.get("email") || "").trim();
       const content = String(formData.get("comment") || "").trim();
       const website = String(formData.get("website") || "").trim();
+      const startedAt = Number(formData.get("started_at") || Date.now());
 
       if (!name || !email || content.length < 10) {
         message.textContent = "Please enter your name, a valid email, and a comment of at least 10 characters.";
@@ -510,10 +483,6 @@
       }
       if (/https?:\/\/|www\.|\b[a-z0-9-]+\.(?:com|net|org|io|co|vn)\b/i.test(content)) {
         message.textContent = "Links are not permitted in comments.";
-        return;
-      }
-      if (!captchaToken) {
-        message.textContent = "Please complete the CAPTCHA verification.";
         return;
       }
 
@@ -531,7 +500,7 @@
             email,
             content,
             website,
-            turnstile_token: captchaToken
+            started_at: startedAt
           })
         });
         const payload = await response.json().catch(() => ({}));
@@ -539,14 +508,11 @@
 
         form.reset();
         message.textContent = payload.message || "Your comment has been posted.";
-        captchaToken = "";
-        if (widgetId !== null && window.turnstile) window.turnstile.reset(widgetId);
+        form.elements.started_at.value = String(Date.now());
         await loadComments();
         trackEvent("comment_submit", { article_slug: post.slug, moderation_status: payload.status || "approved" });
       } catch (error) {
         message.textContent = error.message;
-        if (widgetId !== null && window.turnstile) window.turnstile.reset(widgetId);
-        captchaToken = "";
       } finally {
         submitButton.disabled = false;
         submitButton.textContent = "Post comment";

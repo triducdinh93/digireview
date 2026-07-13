@@ -427,7 +427,6 @@ html[data-theme="dark"] .primary-nav { background: rgba(13,23,18,.92); }
   padding: 11px 12px;
 }
 .comment-honeypot { position: absolute !important; left: -9999px !important; }
-.turnstile-slot { min-height: 65px; }
 .comment-form-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .comment-form-actions button {
   border: 0;
