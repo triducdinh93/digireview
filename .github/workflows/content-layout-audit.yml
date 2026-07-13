@@ -1,4 +1,4 @@
-name: Content Layout Audit
+name: Structured Content Audit
 
 on:
   push:
@@ -6,44 +6,32 @@ on:
       - "posts.js"
       - "app.js"
       - "style.css"
-      - "content-normalizer.js"
+      - "content-schema.js"
       - "audit-content-layout.mjs"
       - "audit-safe-flow-fixtures.mjs"
-      - "extract-google-sites.mjs"
-      - "admin.html"
-      - "index.html"
+      - "audit-v23-static.mjs"
+      - "package.json"
+      - "package-lock.json"
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: digireview-content-layout-audit
-  cancel-in-progress: true
-
 jobs:
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Audit safe-flow regression fixtures
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Audit static architecture
+        run: npm run audit:static
+      - name: Audit schema fixtures
         run: npm run audit:fixtures
-
-      - name: Audit all article layouts
+      - name: Audit all structured posts
         run: npm run audit:layout
