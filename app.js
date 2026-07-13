@@ -772,6 +772,69 @@
     return importedMarkdownToHtml(source, title, heroImage);
   };
 
+  const cleanNodeText = (node) => String(node?.textContent || "").replace(/\s+/g, " ").trim();
+
+  const normalizeImportedStructures = (holder, post) => {
+    const allDivs = [...holder.querySelectorAll("div")];
+
+    allDivs.forEach(container => {
+      const cards = [...container.children].filter(child => child.tagName === "DIV" && child.querySelector(":scope > h4") && child.querySelector(":scope > p"));
+      if (cards.length < 2 || cards.length !== container.children.length) return;
+
+      const labels = cards.map(card => cleanNodeText(card.firstElementChild));
+      const numbered = labels.every((label, index) => label === String(index + 1));
+      const shortLead = labels.every(label => label && label.length <= 6 && !/\s{2,}/.test(label));
+      if (!numbered && !shortLead) return;
+
+      container.classList.add(numbered ? "imported-steps-grid" : "imported-feature-grid");
+      cards.forEach(card => {
+        card.classList.add(numbered ? "imported-step-card" : "imported-feature-card");
+        const title = card.querySelector(":scope > h4");
+        const lead = card.firstElementChild;
+        const description = card.querySelector(":scope > p");
+        if (title) title.classList.add("imported-card-title");
+        if (description) description.classList.add("imported-card-text");
+        if (lead && title && lead.tagName === "DIV") {
+          const head = document.createElement("div");
+          head.className = "imported-card-head";
+          lead.classList.add(numbered ? "step-badge" : "feature-icon");
+          card.insertBefore(head, lead);
+          head.appendChild(lead);
+          head.appendChild(title);
+        }
+      });
+    });
+
+    allDivs.forEach(container => {
+      const children = [...container.children];
+      if (children.length !== 2) return;
+      const [first, second] = children;
+      if (first.tagName !== "DIV" || second.tagName !== "DIV") return;
+      if (cleanNodeText(first).length > 4) return;
+      if (!second.querySelector("p strong, strong")) return;
+      container.classList.add("imported-highlight-box");
+      first.classList.add("imported-highlight-icon");
+      second.classList.add("imported-highlight-body");
+    });
+
+    allDivs.forEach(container => {
+      const children = [...container.children];
+      if (children.length < 4 || children.length > 8) return;
+      if (container.querySelector(":scope > h2, :scope > h3, :scope > h4, :scope > ul, :scope > ol, :scope > table, :scope > img")) return;
+      const joined = cleanNodeText(container).toLowerCase();
+      if (!(/\$\d|one-time|coupon|off|usually|launch your|get it now/.test(joined) && children.some(child => child.tagName === "A"))) return;
+      container.classList.add("imported-pricing-box");
+      const blocks = children.filter(child => ["DIV", "P"].includes(child.tagName));
+      if (blocks[0]) blocks[0].classList.add("pricing-old");
+      if (blocks[1]) blocks[1].classList.add("pricing-current");
+      if (blocks[2]) blocks[2].classList.add("pricing-save");
+      if (blocks[3]) blocks[3].classList.add("pricing-note");
+      if (blocks.length > 4 && blocks[blocks.length - 1]) blocks[blocks.length - 1].classList.add("pricing-coupon");
+      const cta = children.find(child => child.tagName === "A");
+      if (cta) cta.classList.add("imported-pricing-cta");
+    });
+  };
+
   const sanitizeArticleHtml = (post) => {
     const holder = document.createElement("div");
     holder.innerHTML = renderRichContent(post.content, post.title, post.image);
@@ -853,6 +916,7 @@
       if (href === post.externalUrl || label.toLowerCase() === String(post.title || "").toLowerCase()) element.remove();
     });
 
+    normalizeImportedStructures(holder, post);
     return holder.innerHTML;
   };
 
@@ -903,9 +967,9 @@
                 <p class="article-deck">${escapeHtml(post.excerpt)}</p>
                 <div class="post-meta"><span>By ${escapeHtml(NESI_AUTHOR.name)}</span><span>${formatDate(post.date)}</span><span>${postReadLabel(post)}</span><span>${views} local views</span></div>
               </header>
+              <div id="toc-container"></div>
               <img class="article-hero" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'">
               ${renderOriginalSource(post)}
-              <div id="toc-container"></div>
               ${renderCta(post)}
               <div class="article-content" id="article-content">${cleanedArticleContent}</div>
               ${renderProsCons(post)}
@@ -918,7 +982,6 @@
             </div>
             <aside class="article-sidebar">
               <section class="sidebar-widget"><h2>Share this article</h2><div class="share-row"><button type="button" data-share="copy">Copy link</button><a target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(location.href)}">Facebook</a><a target="_blank" rel="noopener" href="https://twitter.com/intent/tweet?url=${encodeURIComponent(location.href)}&text=${encodeURIComponent(post.title)}">X</a><a target="_blank" rel="noopener" href="https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(location.href)}">LinkedIn</a></div></section>
-              <section class="sidebar-widget toc-sidebar-widget"><h2>In this article</h2><div id="sticky-toc"></div></section>
               <section class="sidebar-widget"><h2>Recent Posts</h2><div class="recent-list">${recentPostsMarkup()}</div></section>
             </aside>
           </div>
@@ -951,14 +1014,11 @@
     });
 
     const list = headings.map(heading => `<li class="${heading.tagName === "H3" ? "sub" : ""}"><a href="#${escapeHtml(heading.id)}">${escapeHtml(heading.textContent)}</a></li>`).join("");
-    const inline = headings.length ? `<details class="toc toc-mobile"><summary>Table of Contents <span>${headings.length} sections</span></summary><ol>${list}</ol></details>` : "";
+    const inline = headings.length
+      ? `<nav class="toc toc-inline" aria-label="Table of contents"><div class="toc-inline-head"><strong>In this article</strong><span>${headings.length} sections</span></div><ol>${list}</ol></nav>`
+      : "";
     const container = document.getElementById("toc-container");
     if (container) container.innerHTML = inline;
-
-    const sticky = document.getElementById("sticky-toc");
-    if (sticky) sticky.innerHTML = headings.length
-      ? `<nav class="toc-sidebar" aria-label="Table of contents"><ol>${list}</ol></nav>`
-      : "<p>No sections found.</p>";
   };
 
   const bindRating = (slug) => {
