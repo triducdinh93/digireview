@@ -66,6 +66,12 @@
     return Number.isFinite(parsed) ? parsed : 0;
   };
 
+  const topRecommendationTimestamp = (post) => {
+    const value = post.topRecommendedAt || post.publishedAt || post.updatedAt || post.updated || `${post.date || "1970-01-01"}T00:00:00`;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
   const sortedPosts = () => posts.slice().sort((a, b) => postTimestamp(b) - postTimestamp(a) || Number(b.id || 0) - Number(a.id || 0));
   const getPost = (slug) => posts.find(post => post.slug === slug);
 
@@ -332,6 +338,15 @@
       </section>`;
     bindDynamicEvents(() => renderArchive({ title, description, filter, query }));
     scrollTop();
+  };
+
+  const renderTopRecommendations = () => {
+    currentPage = 1;
+    renderArchive({
+      title: "Top Recommendations",
+      description: "A curated collection of the strongest product reviews and practical guides selected by DigiReview.",
+      filter: post => Boolean(post.topRecommended)
+    });
   };
 
   const renderCategory = (category) => {
@@ -923,9 +938,21 @@
   const prepareArticleMedia = () => {
     document.querySelectorAll("#article-content img").forEach(image => {
       const classify = () => {
-        if (image.naturalWidth && image.naturalHeight && image.naturalWidth <= 220 && image.naturalHeight <= 220) {
+        image.classList.remove("content-icon", "content-tall-media");
+        const width = Number(image.naturalWidth || 0);
+        const height = Number(image.naturalHeight || 0);
+        if (!width || !height) return;
+
+        if (width <= 220 && height <= 220) {
           image.classList.remove("content-media");
           image.classList.add("content-icon");
+          return;
+        }
+
+        image.classList.add("content-media");
+        if (height / width >= 1.28 || height >= 1500) {
+          image.classList.add("content-tall-media");
+          image.closest("figure, a.content-media-link")?.classList.add("contains-tall-media");
         }
       };
       if (image.complete) classify();
@@ -1004,21 +1031,52 @@
     }
   };
 
+  const cleanTocLabel = (value) => String(value || "")
+    .replace(/^\s*(?:section\s+)?\d+(?:\.\d+)*(?:[.)]|\s*[-:])?\s*/i, "")
+    .replace(/^\s*[✅❌☑️✔️✖️•▪︎▫︎]+\s*/u, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
   const buildToc = () => {
     const content = document.getElementById("article-content");
     if (!content) return;
     const headings = [...content.querySelectorAll("h2, h3")]
       .filter(heading => !/^(table of contents|contents)$/i.test(heading.textContent.trim()));
+
     headings.forEach((heading, index) => {
       heading.id = heading.id || `${slugify(heading.textContent)}-${index + 1}`;
     });
 
-    const list = headings.map(heading => `<li class="${heading.tagName === "H3" ? "sub" : ""}"><a href="#${escapeHtml(heading.id)}">${escapeHtml(heading.textContent)}</a></li>`).join("");
-    const inline = headings.length
-      ? `<nav class="toc toc-inline" aria-label="Table of contents"><div class="toc-inline-head"><strong>In this article</strong><span>${headings.length} sections</span></div><ol>${list}</ol></nav>`
-      : "";
+    const groups = [];
+    let activeGroup = null;
+    headings.forEach(heading => {
+      const item = {
+        id: heading.id,
+        label: cleanTocLabel(heading.textContent) || heading.textContent.trim(),
+        tag: heading.tagName
+      };
+      if (heading.tagName === "H2" || !activeGroup) {
+        activeGroup = { ...item, children: [] };
+        groups.push(activeGroup);
+      } else {
+        activeGroup.children.push(item);
+      }
+    });
+
+    const list = groups.map(group => `
+      <li>
+        <a href="#${escapeHtml(group.id)}">${escapeHtml(group.label)}</a>
+        ${group.children.length ? `<ul>${group.children.map(child => `<li><a href="#${escapeHtml(child.id)}">${escapeHtml(child.label)}</a></li>`).join("")}</ul>` : ""}
+      </li>`).join("");
+
     const container = document.getElementById("toc-container");
-    if (container) container.innerHTML = inline;
+    if (!container) return;
+    container.innerHTML = groups.length
+      ? `<details class="toc toc-inline" open>
+          <summary><span>In this article</span><small>${groups.length} main sections</small></summary>
+          <ol>${list}</ol>
+        </details>`
+      : "";
   };
 
   const bindRating = (slug) => {
@@ -1158,6 +1216,8 @@
     } else if (hash === "archive") {
       currentPage = 1;
       result = renderArchive();
+    } else if (hash === "top-recommendations") {
+      result = renderTopRecommendations();
     } else {
       const [key, ...rest] = hash.split("=");
       const value = rest.join("=");
