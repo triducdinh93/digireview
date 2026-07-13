@@ -982,6 +982,7 @@
     const views = incrementView(post.slug);
     const related = relatedPosts(post);
     const cleanedArticleContent = sanitizeArticleHtml(post);
+    const tallImageWidth = Math.min(900, Math.max(280, Number(post.tallImageWidth || 520)));
     app.innerHTML = `
       <article class="article-shell">
         <div class="container">
@@ -998,7 +999,7 @@
               <img class="article-hero" src="${escapeHtml(post.image)}" alt="${escapeHtml(post.title)}" onerror="this.onerror=null;this.src=\'thumbnail-placeholder.svg\'">
               ${renderOriginalSource(post)}
               ${renderCta(post)}
-              <div class="article-content" id="article-content">${cleanedArticleContent}</div>
+              <div class="article-content" id="article-content" style="--tall-image-width:${tallImageWidth}px">${cleanedArticleContent}</div>
               ${renderProsCons(post)}
               ${renderCta(post)}
               <div class="tag-row">${(post.tags || []).map(tag => `<a href="#search=${encodeURIComponent(tag)}">#${escapeHtml(tag)}</a>`).join("")}</div>
