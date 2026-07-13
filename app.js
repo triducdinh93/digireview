@@ -870,7 +870,7 @@
 
     holder.querySelectorAll("h2,h3,h4,p,div,section").forEach(element => {
       const text = element.textContent.replace(/\s+/g, " ").trim();
-      if (!text && !element.querySelector("img,table,ul,ol,blockquote")) {
+      if (!text && !element.querySelector("img,video,audio,object,embed,table,ul,ol,blockquote")) {
         element.remove();
         return;
       }
@@ -912,6 +912,44 @@
         const figure = document.createElement("figure");
         image.replaceWith(figure);
         figure.appendChild(image);
+      }
+    });
+
+    holder.querySelectorAll("video").forEach(video => {
+      video.classList.add("content-video");
+      video.controls = true;
+      video.preload = "metadata";
+      video.removeAttribute("width");
+      video.removeAttribute("height");
+      video.removeAttribute("autoplay");
+      video.style.removeProperty("width");
+      video.style.removeProperty("height");
+      video.style.removeProperty("max-width");
+      video.style.removeProperty("max-height");
+      video.style.removeProperty("position");
+      video.style.removeProperty("left");
+      video.style.removeProperty("right");
+      video.style.removeProperty("transform");
+
+      if (!video.parentElement?.classList.contains("content-video-wrap")) {
+        const wrap = document.createElement("div");
+        wrap.className = "content-video-wrap";
+        video.replaceWith(wrap);
+        wrap.appendChild(video);
+      }
+    });
+
+    holder.querySelectorAll("object,embed").forEach(media => {
+      media.classList.add("content-embedded-media");
+      media.removeAttribute("width");
+      media.removeAttribute("height");
+      media.style.removeProperty("width");
+      media.style.removeProperty("height");
+      if (!media.parentElement?.classList.contains("content-video-wrap")) {
+        const wrap = document.createElement("div");
+        wrap.className = "content-video-wrap";
+        media.replaceWith(wrap);
+        wrap.appendChild(media);
       }
     });
 
