@@ -47,7 +47,7 @@ window.BLOG_DATA = {
   "pages": {
     "about": {
       "title": "About Me",
-      "content": "<p>I provide independent reviews, comparisons, and practical guides for digital tools, software, and online marketing products, helping you clearly understand how they work in real-world situations.</p><h2>How we review products</h2><p>I carefully examine official product details such as pricing, licensing, limitations, support, and realistic use cases. If a product has not been personally tested, I make that clear so you can evaluate it with the right expectations.</p><h2>Editorial principles</h2><ul><li>Present facts clearly, separate from vendor claims.</li><li>Avoid promising guaranteed results or performance.</li><li>Highlight key limitations and potential risks for buyers.</li><li>Be transparent about any affiliate relationships.</li></ul>"
+      "content": "<p>I provide independent reviews, comparisons, and practical guides for digital tools, software, and online marketing products, helping you clearly understand how they work in real-world situations.</p><h2>How I review products</h2><p>I carefully examine official product details such as pricing, licensing, limitations, support, and realistic use cases. If a product has not been personally tested, I make that clear so you can evaluate it with the right expectations.</p><h2>Editorial principles</h2><ul><li>Present facts clearly, separate from vendor claims.</li><li>Avoid promising guaranteed results or performance.</li><li>Highlight key limitations and potential risks for buyers.</li><li>Be transparent about any affiliate relationships.</li></ul>"
     },
     "privacy": {
       "title": "Privacy Policy",
