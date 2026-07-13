@@ -1,4 +1,4 @@
-/* Exported by DigiReview Publisher V11 */
+/* Exported by DigiReview Publisher V18 */
 window.BLOG_DATA = {
   "site": {
     "name": "DigiReview",
@@ -693,15 +693,14 @@ window.BLOG_DATA = {
       "excerpt": "I downloaded and reviewed all 50 AI Side Hustle Videos with Unrestricted PLR. Here is my honest hands-on experience with the bundle, video quality, and resale potential at $5.",
       "date": "2026-07-13",
       "updated": "2026-07-13",
-      "updatedAt": "2026-07-13T06:22:51.805Z",
+      "updatedAt": "2026-07-13T06:40:22.619Z",
       "publishedAt": "2026-07-13T06:19:59.759Z",
-      "featuredAt": "2026-07-13T06:22:51.805Z",
+      "featuredAt": "2026-07-13T06:40:22.619Z",
       "author": "Nesi",
       "primaryCategory": "Product Reviews",
       "categories": [
         "Product Reviews",
-        "Video Marketing",
-        "PLR"
+        "Video Marketing"
       ],
       "tags": [],
       "image": "https://webmagnus.com/fiftyshvidfe/images/product.png",
